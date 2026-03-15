@@ -1,4 +1,5 @@
 ## Предварительный план проекта
+```plaintext
 CustomGameEngineModule/
 │
 ├── 📂 VisualScripting.Core/                 ← БЭКЕНДЕР №1 (парсер)
@@ -35,7 +36,7 @@ CustomGameEngineModule/
 │   │       └── Textures/                        ← текстуры фона
 │   └── 📂 Runtime/                              ← если будет рантайм
 │
-├── 📂 UnityIntegration/                       ← Я (FULLSTACK)
+├── 📂 UnityIntegration/                       ← FULLSTACK
 │   ├── 📂 Editor/
 │   │   ├── UnityIntegration.asmdef
 │   │   ├── VisualScriptingWindow.cs            ← ГЛАВНОЕ ОКНО
@@ -72,6 +73,7 @@ CustomGameEngineModule/
 │
 ├── global.json                                  ← версия .NET
 └── CustomGameEngineModule.sln                    ← решение Visual Studio
+```
 
 ## Доска
 https://boardmix.com/app/editor/h_0dEe8kOR01dMc_kUaEPw
