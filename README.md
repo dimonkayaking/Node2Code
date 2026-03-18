@@ -1,4 +1,4 @@
-## Структура проекта (на данный момент)
+## Структура проекта
 ```plaintext
 CustomGameEngineModule/
 │
