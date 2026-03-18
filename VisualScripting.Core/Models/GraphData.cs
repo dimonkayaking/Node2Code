@@ -33,7 +33,12 @@ namespace VisualScripting.Core.Models
         TransformPositionSet,
 
         // Управляющие конструкции
-        IfStatement
+        IfStatement,
+
+        // Сравнение
+        CompareGreater,
+        CompareLess,
+        CompareEqual
     }
 
     /// <summary>

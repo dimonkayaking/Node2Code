@@ -319,6 +319,9 @@ namespace VisualScripting.Core.Parsers
                 case SyntaxKind.SubtractExpression: type = NodeType.MathSubtract; break;
                 case SyntaxKind.MultiplyExpression: type = NodeType.MathMultiply; break;
                 case SyntaxKind.DivideExpression: type = NodeType.MathDivide; break;
+                case SyntaxKind.GreaterThanExpression: type = NodeType.CompareGreater; break;
+                case SyntaxKind.LessThanExpression: type = NodeType.CompareLess; break;
+                case SyntaxKind.EqualsExpression: type = NodeType.CompareEqual; break;
                 default: 
                     base.VisitBinaryExpression(node);
                     return;

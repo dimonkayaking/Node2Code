@@ -1,79 +1,24 @@
-# Ветка для бэкенда
-## Предварительный план проекта, точно потом будем менять
+## Структура проекта (на данный момент)
 ```plaintext
 CustomGameEngineModule/
 │
-├── 📂 VisualScripting.Core/                 ← БЭКЕНДЕР №1 (парсер)
-│   ├── VisualScripting.Core.csproj
+├── 📂 VisualScripting.Core/                  ← Ядро парсера (Разработчик №2)
+│   ├── VisualScripting.Core.csproj                Проект .NET (зависимость: Microsoft.CodeAnalysis.CSharp)
 │   ├── 📂 Models/
-│   │   ├── GraphData.cs                     ← контракт данных
-│   │   └── NodeData.cs
+│   │   └── GraphData.cs                           Контракт данных: NodeType, NodeData, GraphData
 │   ├── 📂 Parsers/
-│   │   ├── ICodeParser.cs
-│   │   └── RoslynCodeParser.cs              ← сам парсер
-│   ├── 📂 Generators/
-│   │   ├── ICodeGenerator.cs
-│   │   └── SimpleCodeGenerator.cs           ← генератор кода
-│   └── 📂 bin/                               ← скомпилированная DLL
-│       └── Debug/net10.0/VisualScripting.Core.dll
+│   │   └── RoslynCodeParser.cs                    Парсер: C# код → GraphData (через Roslyn AST)
+│   └── 📂 Generators/
+│       └── SimpleCodeGenerator.cs                 Генератор: GraphData → C# код
 │
-├── 📂 VisualScripting.Tests/                 ← ТЕСТЫ (тоже бэкендер №1)
+├── 📂 VisualScripting.Tests/                 ← Юнит-тесты (xUnit, 12 тестов)
 │   ├── VisualScripting.Tests.csproj
-│   └── ParserCodegenTests.cs                 ← тесты парсера
+│   └── ParserCodegenTests.cs                      Все тесты парсера и генератора
 │
-├── 📂 VisualScripting.Editor/                ← БЭКЕНДЕР №2 (визуал)
-│   ├── 📂 Editor/                             ← всё для Unity Editor
-│   │   ├── VisualScripting.Editor.asmdef
-│   │   ├── 📂 Views/
-│   │   │   ├── NodeView.cs                    ← отрисовка ноды
-│   │   │   ├── GraphView.cs                    ← канвас
-│   │   │   └── PortView.cs                     ← порты
-│   │   ├── 📂 Factory/
-│   │   │   └── NodeFactory.cs                  ← создание нод по типу
-│   │   ├── 📂 Styles/
-│   │   │   └── NodeStyles.uss                  ← стили (UI Toolkit)
-│   │   └── 📂 Assets/
-│   │       ├── Icons/                           ← иконки от дизайнера
-│   │       └── Textures/                        ← текстуры фона
-│   └── 📂 Runtime/                              ← если будет рантайм
-│
-├── 📂 UnityIntegration/                       ← FULLSTACK
-│   ├── 📂 Editor/
-│   │   ├── UnityIntegration.asmdef
-│   │   ├── VisualScriptingWindow.cs            ← ГЛАВНОЕ ОКНО
-│   │   ├── 📂 Converters/
-│   │   │   └── GraphToVisualConverter.cs       ← мост данных
-│   │   ├── 📂 Serialization/
-│   │   │   ├── GraphSaver.cs                    ← сохранение JSON
-│   │   │   └── GraphLoader.cs                    ← загрузка
-│   │   ├── 📂 UI/
-│   │   │   ├── ToolbarView.cs                    ← панель инструментов
-│   │   │   ├── CodeEditorView.cs                  ← поле для кода
-│   │   │   └── SplitView.cs                       ← разделитель
-│   │   └── 📂 Debug/
-│   │       └── ErrorLogger.cs                     ← показ ошибок
-│   └── 📂 Runtime/
-│       └── VisualScriptingComponent.cs          ← компонент для сцен
-│
-├── 📂 Assets/                                   ← АССЕТЫ (дизайнер)
-│   ├── 📂 UI/
-│   │   ├── Icons/                                ← иконки
-│   │   ├── Textures/                             ← фоны, сетка
-│   │   └── Styles/                                ← стили CSS
-│   └── 📂 Prefabs/
-│       └── NodePrefab.prefab                      ← если будут префабы
-│
-├── 📂 Docs/                                     ← ДОКУМЕНТАЦИЯ
-│   ├── README.md
-│   ├── TEAM_UPDATE.md
-│   └── API_REFERENCE.md
-│
-├── 📂 .vscode/                                  ← НАСТРОЙКИ VS CODE
-│   ├── launch.json
-│   └── tasks.json
-│
-├── global.json                                  ← версия .NET
-└── CustomGameEngineModule.sln                    ← решение Visual Studio
+├── VisualScripting.slnx                      ← Файл решения .NET
+├── TEAM_UPDATE.md                            ← Обращение к команде (скоуп MVP, инструкции по ролям)
+├── README.md                                 ← Этот файл
+└── .gitignore
 ```
 
 ## Доска

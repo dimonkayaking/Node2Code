@@ -131,6 +131,9 @@ namespace VisualScripting.Core.Generators
                 case NodeType.MathSubtract:
                 case NodeType.MathMultiply:
                 case NodeType.MathDivide:
+                case NodeType.CompareGreater:
+                case NodeType.CompareLess:
+                case NodeType.CompareEqual:
                     string? left = GetInputValue(node, "left", allNodes);
                     string? right = GetInputValue(node, "right", allNodes);
                     string op = node.Type switch
@@ -139,6 +142,9 @@ namespace VisualScripting.Core.Generators
                         NodeType.MathSubtract => "-",
                         NodeType.MathMultiply => "*",
                         NodeType.MathDivide => "/",
+                        NodeType.CompareGreater => ">",
+                        NodeType.CompareLess => "<",
+                        NodeType.CompareEqual => "==",
                         _ => "+"
                     };
                     return $"({left} {op} {right})";
