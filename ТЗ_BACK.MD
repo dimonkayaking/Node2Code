@@ -455,50 +455,81 @@ Assets/Plugins/VisualScripting/
 ## 📦 ЧТО СДАЕШЬ (Роль №2)
 
 ```
-VisualScripting.Editor.zip
-├── Editor/
-│   ├── Nodes/
-│   │   ├── Base/
-│   │   │   ├── BaseNode.cs
-│   │   │   ├── BaseValueNode.cs
-│   │   │   └── BaseExecutionNode.cs
-│   │   ├── Math/
-│   │   │   ├── AddNode.cs
-│   │   │   ├── SubtractNode.cs
-│   │   │   ├── MultiplyNode.cs
-│   │   │   └── DivideNode.cs
-│   │   ├── Comparison/
-│   │   │   ├── GreaterNode.cs
-│   │   │   ├── LessNode.cs
-│   │   │   └── EqualNode.cs
-│   │   ├── Variables/
-│   │   │   ├── VariableDeclarationNode.cs
-│   │   │   ├── GetVariableNode.cs
-│   │   │   └── SetVariableNode.cs
-│   │   ├── Flow/
-│   │   │   └── IfNode.cs
-│   │   ├── Unity/
-│   │   │   ├── Vector3CreateNode.cs
-│   │   │   ├── GetPositionNode.cs
-│   │   │   └── SetPositionNode.cs
-│   │   ├── Debug/
-│   │   │   └── DebugLogNode.cs
-│   │   ├── Literals/
-│   │   │   ├── IntNode.cs
-│   │   │   ├── FloatNode.cs
-│   │   │   ├── StringNode.cs
-│   │   │   └── BoolNode.cs
-│   │   └── GraphSerializer.cs
-│   └── VisualScripting.Editor.asmdef
-└── Runtime/
-    ├── Components/
-    │   └── VisualScriptBehaviour.cs
-    ├── Assets/
-    │   └── GraphAsset.cs
-    ├── Execution/
-    │   ├── GraphRunner.cs
-    │   └── NodeExecutor.cs
-    └── VisualScripting.Runtime.asmdef
+VisualScripting/ (корень репозитория)
+│
+├── Core/                                     ← РОЛЬ №1
+│
+└── UnityProject/                              ← UNITY ПРОЕКТ
+    └── Assets/
+        └── Plugins/
+            └── VisualScripting/
+                │
+                ├── Core/                      ← DLL от Роли №1 (уже есть)
+                │   └── VisualScripting.Core.dll
+                │
+                ├── Editor/                     ← ТВОЯ ПАПКА (РОЛЬ №2)
+                │   ├── VisualScripting.Editor.asmdef
+                │   │
+                │   ├── Nodes/
+                │   │   ├── Base/
+                │   │   │   ├── BaseNode.cs
+                │   │   │   ├── BaseValueNode.cs
+                │   │   │   └── BaseExecutionNode.cs
+                │   │   │
+                │   │   ├── Literals/
+                │   │   │   ├── IntNode.cs
+                │   │   │   ├── FloatNode.cs
+                │   │   │   ├── StringNode.cs
+                │   │   │   └── BoolNode.cs
+                │   │   │
+                │   │   ├── Math/
+                │   │   │   ├── AddNode.cs
+                │   │   │   ├── SubtractNode.cs
+                │   │   │   ├── MultiplyNode.cs
+                │   │   │   └── DivideNode.cs
+                │   │   │
+                │   │   ├── Comparison/
+                │   │   │   ├── GreaterNode.cs
+                │   │   │   ├── LessNode.cs
+                │   │   │   └── EqualNode.cs
+                │   │   │
+                │   │   ├── Variables/
+                │   │   │   ├── VariableDeclarationNode.cs
+                │   │   │   ├── GetVariableNode.cs
+                │   │   │   └── SetVariableNode.cs
+                │   │   │
+                │   │   ├── Flow/
+                │   │   │   └── IfNode.cs
+                │   │   │
+                │   │   ├── Unity/
+                │   │   │   ├── Vector3CreateNode.cs
+                │   │   │   ├── GetPositionNode.cs
+                │   │   │   └── SetPositionNode.cs
+                │   │   │
+                │   │   ├── Debug/
+                │   │   │   └── DebugLogNode.cs
+                │   │   │
+                │   │   └── GraphSerializer.cs
+                │   │
+                │   └── (другие Editor папки будут добавлять другие)
+                │
+                ├── Runtime/                     ← ТВОЯ ПАПКА (РОЛЬ №2)
+                │   ├── VisualScripting.Runtime.asmdef
+                │   │
+                │   ├── Assets/
+                │   │   └── GraphAsset.cs
+                │   │
+                │   ├── Components/
+                │   │   └── VisualScriptBehaviour.cs
+                │   │
+                │   └── Execution/
+                │       ├── GraphRunner.cs
+                │       └── NodeExecutor.cs
+                │
+                ├── Integration/                 ← FULLSTACK
+                ├── Windows/                     ← FULLSTACK
+                ├── Documentation/                ← FULLSTACK
+                └── (остальные папки)
 ```
 
 ---
