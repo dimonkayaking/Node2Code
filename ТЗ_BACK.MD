@@ -171,7 +171,7 @@ VisualScripting/ (КОРЕНЬ РЕПОЗИТОРИЯ)
 ├── LICENSE                                        ← ЛИЦЕНЗИЯ
 ├── .gitignore                                     ← ИГНОРИРУЕМЫЕ ФАЙЛЫ
 └── .gitattributes                                 ← АТРИБУТЫ GIT
----
+```
 
 # 👨‍💻 РОЛЬ №1: CORE DEVELOPER (Парсер/Генератор)
 
