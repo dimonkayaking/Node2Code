@@ -2,6 +2,7 @@
 https://boardmix.com/app/editor/h_0dEe8kOR01dMc_kUaEPw
 
 ## Описание
+```
  ОБЩЕЕ ОПИСАНИЕ ПРОЕКТА
 🌟 ИДЕЯ ПРОЕКТА
 Создать двунаправленный мост между C# кодом и визуальными нодами в Unity.
@@ -271,6 +272,6 @@ Open Source + поддержка/документация платно
 Код и визуал всегда синхронизированы
 
 Это будущее разработки игр. И мы его делаем. 🚀
-
+```
 
 <img width="1514" height="755" alt="image" src="https://github.com/user-attachments/assets/52eaeb24-0efa-4031-a068-af32ab81e876" />
