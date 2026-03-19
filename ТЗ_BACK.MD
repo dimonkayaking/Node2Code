@@ -161,33 +161,9 @@ VisualScripting.Core.zip
 
 ---
 
-### 2. **Создать структуру папок** (1 день)
-
-```
-Assets/Plugins/VisualScripting/
-├── Editor/
-│   ├── Nodes/
-│   │   ├── Base/
-│   │   ├── Math/
-│   │   ├── Comparison/
-│   │   ├── Variables/
-│   │   ├── Flow/
-│   │   ├── Unity/
-│   │   ├── Debug/
-│   │   ├── Literals/
-│   │   └── GraphSerializer.cs
-│   └── VisualScripting.Editor.asmdef
-├── Runtime/
-│   ├── Components/
-│   ├── Assets/
-│   ├── Execution/
-│   └── VisualScripting.Runtime.asmdef
-└── (остальное не твоя зона)
-```
-
 ---
 
-### 3. **Создать базовые классы** (3 дня)
+### 2. **Создать базовые классы** 
 
 #### `BaseNode.cs`
 **Назначение:** Базовый класс для всех визуальных нод  
@@ -375,7 +351,7 @@ Assets/Plugins/VisualScripting/
 
 ---
 
-### 5. **Создать GraphSerializer** (1 неделя)
+### 4. **Создать GraphSerializer** (1 неделя)
 
 **Файл:** `Editor/Nodes/GraphSerializer.cs`
 
@@ -403,7 +379,7 @@ Assets/Plugins/VisualScripting/
 
 ---
 
-### 6. **Создать Runtime систему** (1-2 недели)
+### 5. **Создать Runtime систему** (1-2 недели)
 
 #### `GraphAsset.cs`
 **Где лежит:** `Runtime/Assets/GraphAsset.cs`  
