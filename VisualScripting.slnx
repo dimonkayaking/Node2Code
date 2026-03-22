@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="VisualScripting.Core/VisualScripting.Core.csproj" />
+  <Project Path="VisualScripting.Tests/VisualScripting.Tests.csproj" />
+</Solution>
