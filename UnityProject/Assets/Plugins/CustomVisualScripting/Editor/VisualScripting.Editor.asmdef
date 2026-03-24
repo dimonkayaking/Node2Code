@@ -2,6 +2,7 @@
     "name": "VisualScripting.Editor",
     "references": [
         "CustomVisualScripting",
+        "VisualScripting.Runtime",
         "com.alelievr.node-graph-processor"
     ],
     "includePlatforms": ["Editor"]
