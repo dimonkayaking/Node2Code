@@ -14,7 +14,7 @@ namespace CustomVisualScripting.Editor.Nodes.Unity
         public GameObject gameObject;
 
         [Output("Position")]
-        public Vector3 position;
+        public new Vector3 position;
 
         public override string name => "Get Position";
         

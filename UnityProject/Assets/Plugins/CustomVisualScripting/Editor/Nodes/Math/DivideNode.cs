@@ -26,7 +26,7 @@ namespace CustomVisualScripting.Editor.Nodes.Math
             if (Mathf.Approximately(b, 0))
             {
                 result = 0;
-                Debug.LogWarning("Деление на ноль в DivideNode");
+                UnityEngine.Debug.LogWarning("Деление на ноль в DivideNode");
             }
             else
             {

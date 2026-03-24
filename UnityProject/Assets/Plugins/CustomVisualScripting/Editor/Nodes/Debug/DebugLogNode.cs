@@ -26,8 +26,19 @@ namespace CustomVisualScripting.Editor.Nodes.Debug
             output = execute;
             if (execute)
             {
-                Debug.Log($"[VS] {message}");
+                UnityEngine.Debug.Log($"[VS] {message}");
             }
+        }
+        
+        public override void InitializeFromData(NodeData data)
+        {
+            base.InitializeFromData(data);
+        }
+
+        public override NodeData ToNodeData()
+        {
+            var data = base.ToNodeData();
+            return data;
         }
     }
 }

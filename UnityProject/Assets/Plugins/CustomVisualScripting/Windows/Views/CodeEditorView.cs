@@ -44,7 +44,7 @@ namespace CustomVisualScripting.Windows.Views
             style.marginRight = 5;
         }
         
-        public void Clear()
+        public new void Clear()
         {
             _textField.value = "";
         }
