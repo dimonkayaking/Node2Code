@@ -1,13 +1,11 @@
 using VisualScripting.Core.Models;
-using VisualScripting.Core.Parsers;
 
 namespace VisualScripting.Core.Parsers
 {
-    public static class RoslynCodeParser
+    public class RoslynCodeParser  // ← убрали static
     {
-        public static ParseResult Parse(string code)
+        public ParseResult Parse(string code)  // ← убрали static
         {
-            // Временная реализация
             return new ParseResult
             {
                 Graph = new GraphData(),

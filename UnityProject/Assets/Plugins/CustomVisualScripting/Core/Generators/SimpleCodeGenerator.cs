@@ -2,9 +2,9 @@ using VisualScripting.Core.Models;
 
 namespace VisualScripting.Core.Generators
 {
-    public static class SimpleCodeGenerator
+    public class SimpleCodeGenerator  // ← убрали static
     {
-        public static string Generate(GraphData graph)
+        public string Generate(GraphData graph)  // ← убрали static
         {
             return "// Generated code\n" +
                    "public class GeneratedClass\n" +

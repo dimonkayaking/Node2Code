@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using VisualScripting.Core.Models;
 using VisualScripting.Core.Parsers;
@@ -7,58 +6,22 @@ namespace CustomVisualScripting.Integration
 {
     public static class ParserBridge
     {
-        private static RoslynCodeParser _parser;
-        private static bool _initialized = false;
+        private static RoslynCodeParser _parser = new RoslynCodeParser();
         
         public static void Initialize()
         {
-            if (_initialized) return;
-            
-            try
-            {
-                _parser = new RoslynCodeParser();
-                _initialized = true;
-                Debug.Log("[VS] Парсер инициализирован");
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[VS] Ошибка инициализации парсера: {e.Message}");
-            }
+            Debug.Log("[VS] ParserBridge инициализирован");
         }
         
         public static ParseResult Parse(string code)
         {
-            Initialize();
-            
-            var result = new ParseResult();
-            
-            try
+            if (string.IsNullOrEmpty(code))
             {
-                if (_parser == null)
-                {
-                    result.Errors.Add("Парсер не инициализирован");
-                    return result;
-                }
-                
-                Debug.Log($"[VS] Парсинг кода ({code.Length} символов)");
-                result = _parser.Parse(code);
-                
-                if (result.HasErrors)
-                {
-                    Debug.LogWarning($"[VS] Найдено ошибок: {result.Errors.Count}");
-                }
-                else
-                {
-                    Debug.Log($"[VS] Создано нод: {result.Graph.Nodes.Count}");
-                }
-            }
-            catch (Exception e)
-            {
-                result.Errors.Add($"Критическая ошибка: {e.Message}");
-                Debug.LogError(e);
+                Debug.LogError("[VS] Код пуст");
+                return new ParseResult { Errors = new System.Collections.Generic.List<string> { "Код пуст" } };
             }
             
-            return result;
+            return _parser.Parse(code);
         }
     }
 }
