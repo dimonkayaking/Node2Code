@@ -1,0 +1,8 @@
+{
+    "name": "VisualScripting.Editor",
+    "references": [
+        "CustomVisualScripting",
+        "com.alelievr.node-graph-processor"
+    ],
+    "includePlatforms": ["Editor"]
+}
