@@ -3,9 +3,8 @@
     "rootNamespace": "CustomVisualScripting",
     "references": [
         "CustomVisualScripting",
-        "com.alelievr.NodeGraphProcessor.Runtime",
-        "com.alelievr.NodeGraphProcessor.Editor"
+        "com.alelievr.node-graph-processor",
+        "VisualScripting.Core"
     ],
-    "includePlatforms": ["Editor"],
-    "excludePlatforms": []
+    "includePlatforms": ["Editor"]
 }

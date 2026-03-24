@@ -1,9 +1,0 @@
-{
-    "name": "com.alelievr.NodeGraphProcessor.Editor",
-    "rootNamespace": "GraphProcessor",
-    "references": [
-        "com.alelievr.NodeGraphProcessor.Runtime"
-    ],
-    "includePlatforms": ["Editor"],
-    "excludePlatforms": []
-}
