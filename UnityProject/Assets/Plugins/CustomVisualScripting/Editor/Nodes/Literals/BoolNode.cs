@@ -1,35 +1,41 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Literals
 {
     [System.Serializable, NodeMenuItem("Literals/Bool")]
-    public class BoolNode : BaseValueNode
+    public class BoolNode : CustomBaseNode
     {
-        public override NodeType NodeType => NodeType.VariableBool;
+        public override NodeType NodeType => NodeType.LiteralBool;
 
-        public bool boolValue;
+        [Output("Value")]
+        public bool value;
 
-        public override string name => "Bool";
+        public bool boolValue = true;
 
-        public override object GetValue() => boolValue;
+        public override string name => $"Bool: {boolValue}";
+        
+        protected override void Process()
+        {
+            value = boolValue;
+        }
 
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            if (bool.TryParse(data.Value, out bool result))
+            if (bool.TryParse(data.Value, out bool parsed))
             {
-                boolValue = result;
+                boolValue = parsed;
             }
         }
 
         public override NodeData ToNodeData()
         {
             var data = base.ToNodeData();
-            data.Value = boolValue ? "true" : "false";
+            data.Value = boolValue.ToString();
+            data.ValueType = "bool";
             return data;
         }
     }

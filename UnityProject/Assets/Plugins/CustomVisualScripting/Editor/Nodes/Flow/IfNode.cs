@@ -1,31 +1,32 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [System.Serializable, NodeMenuItem("Flow/If")]
-    public class IfNode : BaseNode
+    public class IfNode : CustomBaseNode
     {
-        public override NodeType NodeType => NodeType.IfStatement;
+        public override NodeType NodeType => NodeType.FlowIf;
 
-        [Input("execIn")]
-        public CustomVisualScripting.Editor.Nodes.Base.Flow execIn;
-
-        [Input("condition")]
+        [Input("Condition")]
         public bool condition;
 
-        [Output("execTrue")]
-        public CustomVisualScripting.Editor.Nodes.Base.Flow execTrue;
+        [Input("True")]
+        public object trueValue;
 
-        [Output("execFalse")]
-        public CustomVisualScripting.Editor.Nodes.Base.Flow execFalse;
+        [Input("False")]
+        public object falseValue;
 
-        [Output("execOut")]
-        public CustomVisualScripting.Editor.Nodes.Base.Flow execOut;
+        [Output("Result")]
+        public object result;
 
-        public override string name => "If";
+        public override string name => "If Condition";
+        
+        protected override void Process()
+        {
+            result = condition ? trueValue : falseValue;
+        }
     }
 }

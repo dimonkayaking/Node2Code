@@ -1,35 +1,46 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Variables
 {
     [System.Serializable, NodeMenuItem("Variables/Declaration")]
-    public class VariableDeclarationNode : BaseExecutionNode
+    public class VariableDeclarationNode : CustomBaseNode
     {
         public override NodeType NodeType => NodeType.VariableDeclaration;
 
-        [Input("value")]
+        [Input("Variable Name")]
+        public string variableName;
+
+        [Input("Value")]
         public object value;
 
-        public string variableName = "newVar";
-        public string variableType = "int";
+        [Output("Out")]
+        public object output;
 
-        public override string name => "Declare Variable";
+        public string variableNameValue = "";
+        public string variableType = "object";
+
+        public override string name => $"Declare: {variableNameValue} : {variableType}";
+        
+        protected override void Process()
+        {
+            variableName = variableNameValue;
+            output = value;
+        }
 
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableName = data.Value;
+            variableNameValue = data.Value;
             variableType = data.ValueType;
         }
 
         public override NodeData ToNodeData()
         {
             var data = base.ToNodeData();
-            data.Value = variableName;
+            data.Value = variableNameValue;
             data.ValueType = variableType;
             return data;
         }

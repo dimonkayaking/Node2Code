@@ -1,28 +1,33 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Literals
 {
     [System.Serializable, NodeMenuItem("Literals/Int")]
-    public class IntNode : BaseValueNode
+    public class IntNode : CustomBaseNode
     {
-        public override NodeType NodeType => NodeType.VariableInt;
+        public override NodeType NodeType => NodeType.LiteralInt;
 
-        public int intValue;
+        [Output("Value")]
+        public int value;
 
-        public override string name => "Int";
+        public int intValue = 0;
 
-        public override object GetValue() => intValue;
+        public override string name => $"Int: {intValue}";
+        
+        protected override void Process()
+        {
+            value = intValue;
+        }
 
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            if (int.TryParse(data.Value, out int result))
+            if (int.TryParse(data.Value, out int parsed))
             {
-                intValue = result;
+                intValue = parsed;
             }
         }
 
@@ -30,6 +35,7 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         {
             var data = base.ToNodeData();
             data.Value = intValue.ToString();
+            data.ValueType = "int";
             return data;
         }
     }

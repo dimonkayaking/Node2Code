@@ -1,164 +1,87 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 using GraphProcessor;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
-using CustomVisualScripting.Editor.Nodes.Literals;
-using CustomVisualScripting.Editor.Nodes.Math;
-using CustomVisualScripting.Editor.Nodes.Comparison;
-using CustomVisualScripting.Editor.Nodes.Variables;
-using CustomVisualScripting.Editor.Nodes.Flow;
-using CustomVisualScripting.Editor.Nodes.Unity;
-using CustomVisualScripting.Editor.Nodes.Debug;
 
 namespace CustomVisualScripting.Editor.Nodes
 {
     public static class GraphSerializer
     {
-        public static GraphData ToGraphData(BaseGraph graph)
+        public static GraphData SerializeToGraphData(BaseGraph graph)
         {
-            var data = new GraphData();
+            var graphData = new GraphData();
             
-            foreach (var node in graph.nodes)
+            if (graph.nodes != null)
             {
-                if (node is BaseNode baseNode)
+                foreach (var node in graph.nodes)
                 {
-                    var nodeData = baseNode.ToNodeData();
-
-                    foreach (var port in baseNode.inputPorts)
+                    if (node is CustomBaseNode customNode)
                     {
-                        if (port.portData.identifier != "execIn")
-                        {
-                            var edges = port.GetEdges();
-                            if (edges != null && edges.Count > 0)
-                            {
-                                var edge = edges[0];
-                                if (edge.outputNode is BaseNode connectedNode)
-                                {
-                                    nodeData.InputConnections[port.portData.identifier] = connectedNode.NodeId;
-                                }
-                            }
-                        }
+                        graphData.Nodes.Add(customNode.ToNodeData());
                     }
-
-                    foreach (var port in baseNode.outputPorts)
-                    {
-                        if (port.portData.identifier.StartsWith("exec"))
-                        {
-                            var edges = port.GetEdges();
-                            if (edges != null && edges.Count > 0)
-                            {
-                                var edge = edges[0];
-                                if (edge.inputNode is BaseNode connectedNode)
-                                {
-                                    string key = port.portData.identifier == "execOut" ? "next" :
-                                                 port.portData.identifier == "execTrue" ? "true" :
-                                                 port.portData.identifier == "execFalse" ? "false" : port.portData.identifier;
-                                    nodeData.ExecutionFlow[key] = connectedNode.NodeId;
-                                }
-                            }
-                        }
-                    }
-
-                    data.Nodes.Add(nodeData);
                 }
             }
-
-            return data;
+            
+            if (graph.edges != null)
+            {
+                foreach (var edge in graph.edges)
+                {
+                    // TODO: Добавить обработку связей
+                }
+            }
+            
+            return graphData;
         }
-
-        public static void FromGraphData(BaseGraph graph, GraphData data)
+        
+        public static void DeserializeToGraph(BaseGraph graph, GraphData graphData)
         {
-            while (graph.nodes.Count > 0)
-            {
-                graph.RemoveNode(graph.nodes[0]);
-            }
-
-            var nodeDict = new Dictionary<string, BaseNode>();
-
-            foreach (var nodeData in data.Nodes)
-            {
-                BaseNode node = CreateNodeByType(nodeData.Type);
-                if (node != null)
-                {
-                    graph.AddNode(node);
-                    node.InitializeFromData(nodeData);
-                    nodeDict[nodeData.Id] = node;
-                }
-            }
-
-            foreach (var nodeData in data.Nodes)
-            {
-                if (!nodeDict.TryGetValue(nodeData.Id, out var node)) continue;
-
-                foreach (var inputKV in nodeData.InputConnections)
-                {
-                    if (nodeDict.TryGetValue(inputKV.Value, out var sourceNode))
-                    {
-                        var outputPort = sourceNode.outputPorts.FirstOrDefault(p => !p.portData.identifier.StartsWith("exec"));
-                        var inputPort = node.inputPorts.FirstOrDefault(p => p.portData.identifier == inputKV.Key);
-
-                        if (outputPort != null && inputPort != null)
-                        {
-                            graph.Connect(inputPort, outputPort);
-                        }
-                    }
-                }
-
-                foreach (var execKV in nodeData.ExecutionFlow)
-                {
-                    if (nodeDict.TryGetValue(execKV.Value, out var targetNode))
-                    {
-                        string portName = execKV.Key == "next" ? "execOut" :
-                                          execKV.Key == "true" ? "execTrue" :
-                                          execKV.Key == "false" ? "execFalse" : execKV.Key;
-
-                        var outputPort = node.outputPorts.FirstOrDefault(p => p.portData.identifier == portName);
-                        var inputPort = targetNode.inputPorts.FirstOrDefault(p => p.portData.identifier == "execIn");
-
-                        if (outputPort != null && inputPort != null)
-                        {
-                            graph.Connect(inputPort, outputPort);
-                        }
-                    }
-                }
-            }
+            if (graphData?.Nodes == null) return;
+            
+            // TODO: Создать узлы из данных
         }
-
-        private static BaseNode CreateNodeByType(NodeType type)
+        
+        public static string GetNodeColor(NodeType nodeType)
         {
-            switch (type)
+            return nodeType switch
             {
-                case NodeType.VariableInt: return Node.CreateFromType<IntNode>(Vector2.zero) as BaseNode;
-                case NodeType.VariableFloat: return Node.CreateFromType<FloatNode>(Vector2.zero) as BaseNode;
-                case NodeType.VariableString: return Node.CreateFromType<StringNode>(Vector2.zero) as BaseNode;
-                case NodeType.VariableBool: return Node.CreateFromType<BoolNode>(Vector2.zero) as BaseNode;
-                
-                case NodeType.MathAdd: return Node.CreateFromType<AddNode>(Vector2.zero) as BaseNode;
-                case NodeType.MathSubtract: return Node.CreateFromType<SubtractNode>(Vector2.zero) as BaseNode;
-                case NodeType.MathMultiply: return Node.CreateFromType<MultiplyNode>(Vector2.zero) as BaseNode;
-                case NodeType.MathDivide: return Node.CreateFromType<DivideNode>(Vector2.zero) as BaseNode;
-
-                case NodeType.CompareGreater: return Node.CreateFromType<GreaterNode>(Vector2.zero) as BaseNode;
-                case NodeType.CompareLess: return Node.CreateFromType<LessNode>(Vector2.zero) as BaseNode;
-                case NodeType.CompareEqual: return Node.CreateFromType<EqualNode>(Vector2.zero) as BaseNode;
-
-                case NodeType.VariableDeclaration: return Node.CreateFromType<VariableDeclarationNode>(Vector2.zero) as BaseNode;
-                case NodeType.VariableRead: return Node.CreateFromType<GetVariableNode>(Vector2.zero) as BaseNode;
-                case NodeType.VariableAssignment: return Node.CreateFromType<SetVariableNode>(Vector2.zero) as BaseNode;
-
-                case NodeType.IfStatement: return Node.CreateFromType<IfNode>(Vector2.zero) as BaseNode;
-
-                case NodeType.Vector3Create: return Node.CreateFromType<Vector3CreateNode>(Vector2.zero) as BaseNode;
-                case NodeType.TransformPositionRead: return Node.CreateFromType<GetPositionNode>(Vector2.zero) as BaseNode;
-                case NodeType.TransformPositionSet: return Node.CreateFromType<SetPositionNode>(Vector2.zero) as BaseNode;
-
-                case NodeType.DebugLog: return Node.CreateFromType<DebugLogNode>(Vector2.zero) as BaseNode;
-                
-                default: return null;
-            }
+                NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString => "#4CAF50",
+                NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply or NodeType.MathDivide => "#2196F3",
+                NodeType.CompareEqual or NodeType.CompareGreater or NodeType.CompareLess => "#FF9800",
+                NodeType.FlowIf => "#9C27B0",
+                NodeType.DebugLog => "#F44336",
+                NodeType.UnityGetPosition or NodeType.UnitySetPosition or NodeType.UnityVector3 => "#00BCD4",
+                NodeType.VariableGet or NodeType.VariableSet or NodeType.VariableDeclaration => "#3F51B5",
+                _ => "#757575"
+            };
+        }
+        
+        public static string GetNodeDisplayName(NodeType nodeType)
+        {
+            return nodeType switch
+            {
+                NodeType.LiteralBool => "Bool",
+                NodeType.LiteralInt => "Int",
+                NodeType.LiteralFloat => "Float",
+                NodeType.LiteralString => "String",
+                NodeType.MathAdd => "Add",
+                NodeType.MathSubtract => "Subtract",
+                NodeType.MathMultiply => "Multiply",
+                NodeType.MathDivide => "Divide",
+                NodeType.CompareEqual => "Equal",
+                NodeType.CompareGreater => "Greater",
+                NodeType.CompareLess => "Less",
+                NodeType.FlowIf => "If",
+                NodeType.DebugLog => "Debug Log",
+                NodeType.UnityGetPosition => "Get Position",
+                NodeType.UnitySetPosition => "Set Position",
+                NodeType.UnityVector3 => "Vector3",
+                NodeType.VariableGet => "Get Variable",
+                NodeType.VariableSet => "Set Variable",
+                NodeType.VariableDeclaration => "Declare Variable",
+                _ => "Unknown"
+            };
         }
     }
 }

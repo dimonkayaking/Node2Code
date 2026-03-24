@@ -1,19 +1,33 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Unity
 {
-    [System.Serializable, NodeMenuItem("Unity/Get Transform Position")]
-    public class GetPositionNode : BaseNode
+    [System.Serializable, NodeMenuItem("Unity/Get Position")]
+    public class GetPositionNode : CustomBaseNode
     {
-        public override NodeType NodeType => NodeType.TransformPositionRead;
+        public override NodeType NodeType => NodeType.UnityGetPosition;
 
-        [Output("position")]
+        [Input("GameObject")]
+        public GameObject gameObject;
+
+        [Output("Position")]
         public Vector3 position;
 
         public override string name => "Get Position";
+        
+        protected override void Process()
+        {
+            if (gameObject != null)
+            {
+                position = gameObject.transform.position;
+            }
+            else
+            {
+                position = Vector3.zero;
+            }
+        }
     }
 }

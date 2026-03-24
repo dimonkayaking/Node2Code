@@ -1,28 +1,32 @@
-using System;
-using UnityEngine;
 using GraphProcessor;
+using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Unity
 {
-    [System.Serializable, NodeMenuItem("Unity/Vector3 Create")]
-    public class Vector3CreateNode : BaseNode
+    [System.Serializable, NodeMenuItem("Unity/Create Vector3")]
+    public class Vector3CreateNode : CustomBaseNode
     {
-        public override NodeType NodeType => NodeType.Vector3Create;
+        public override NodeType NodeType => NodeType.UnityVector3;
 
-        [Input("x")]
+        [Input("X")]
         public float x;
 
-        [Input("y")]
+        [Input("Y")]
         public float y;
 
-        [Input("z")]
+        [Input("Z")]
         public float z;
 
-        [Output("result")]
-        public Vector3 result;
+        [Output("Vector3")]
+        public Vector3 vector;
 
-        public override string name => "New Vector3";
+        public override string name => "Create Vector3";
+        
+        protected override void Process()
+        {
+            vector = new Vector3(x, y, z);
+        }
     }
 }

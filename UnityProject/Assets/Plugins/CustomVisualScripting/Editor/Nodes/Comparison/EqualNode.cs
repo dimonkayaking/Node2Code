@@ -1,11 +1,12 @@
 using GraphProcessor;
 using UnityEngine;
+using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Comparison
 {
     [System.Serializable, NodeMenuItem("Comparison/Equal")]
-    public class EqualNode : CustomBaseNode  // ← изменено
+    public class EqualNode : CustomBaseNode
     {
         public override NodeType NodeType => NodeType.CompareEqual;
 
