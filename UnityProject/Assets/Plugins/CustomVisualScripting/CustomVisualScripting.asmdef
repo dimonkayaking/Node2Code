@@ -1,0 +1,12 @@
+{
+    "name": "CustomVisualScripting",
+    "rootNamespace": "CustomVisualScripting",
+    "references": [
+        "com.alelievr.NodeGraphProcessor.Runtime",
+        "com.alelievr.NodeGraphProcessor.Editor",
+        "VisualScripting.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

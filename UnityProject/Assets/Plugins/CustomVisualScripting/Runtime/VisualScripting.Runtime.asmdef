@@ -1,5 +1,10 @@
 {
-    "name": "CustomVisualScripting.Runtime",
-    "references": ["VisualScripting.Core"],
-    "includePlatforms": []
+    "name": "VisualScripting.Runtime",
+    "rootNamespace": "CustomVisualScripting",
+    "references": [
+        "CustomVisualScripting",
+        "com.alelievr.NodeGraphProcessor.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
 }

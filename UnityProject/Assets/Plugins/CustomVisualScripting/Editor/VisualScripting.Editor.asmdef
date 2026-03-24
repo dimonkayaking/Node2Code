@@ -1,22 +1,11 @@
 {
-    "name": "CustomVisualScripting.Editor",
-    "rootNamespace": "",
+    "name": "VisualScripting.Editor",
+    "rootNamespace": "CustomVisualScripting",
     "references": [
-        "CustomVisualScripting.Runtime",
-        "VisualScripting.Core"
+        "CustomVisualScripting",
+        "com.alelievr.NodeGraphProcessor.Runtime",
+        "com.alelievr.NodeGraphProcessor.Editor"
     ],
     "includePlatforms": ["Editor"],
-    "excludePlatforms": [],
-    "allowUnsafeCode": false,
-    "overrideReferences": true,
-    "precompiledReferences": [
-        "VisualScripting.Core.dll",
-        "Microsoft.CodeAnalysis.dll",
-        "Microsoft.CodeAnalysis.CSharp.dll",
-        "System.Collections.Immutable.dll"
-    ],
-    "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": [],
-    "noEngineReferences": false
+    "excludePlatforms": []
 }

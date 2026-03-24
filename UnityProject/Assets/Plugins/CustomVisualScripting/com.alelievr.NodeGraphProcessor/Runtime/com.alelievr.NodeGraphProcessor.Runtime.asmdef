@@ -1,0 +1,7 @@
+{
+    "name": "com.alelievr.NodeGraphProcessor.Runtime",
+    "rootNamespace": "GraphProcessor",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}
