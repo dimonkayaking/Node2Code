@@ -61,36 +61,43 @@ namespace CustomVisualScripting.Integration
         {
             switch (type)
             {
-                case NodeType.VariableInt:
-                case NodeType.VariableFloat:
-                case NodeType.VariableString:
-                case NodeType.VariableBool:
-                    return new Color(0.3f, 0.5f, 0.9f);
+                // Литералы
+                case NodeType.LiteralBool:
+                case NodeType.LiteralInt:
+                case NodeType.LiteralFloat:
+                case NodeType.LiteralString:
+                    return new Color(0.3f, 0.7f, 0.3f);
                     
+                // Математика
                 case NodeType.MathAdd:
                 case NodeType.MathSubtract:
                 case NodeType.MathMultiply:
                 case NodeType.MathDivide:
                     return new Color(0.2f, 0.8f, 0.4f);
                     
+                // Сравнения
+                case NodeType.CompareEqual:
                 case NodeType.CompareGreater:
                 case NodeType.CompareLess:
-                case NodeType.CompareEqual:
                     return new Color(1f, 0.6f, 0.1f);
                     
+                // Переменные
                 case NodeType.VariableDeclaration:
-                case NodeType.VariableRead:
-                case NodeType.VariableAssignment:
+                case NodeType.VariableGet:
+                case NodeType.VariableSet:
                     return new Color(0.7f, 0.3f, 0.8f);
                     
-                case NodeType.IfStatement:
+                // Flow
+                case NodeType.FlowIf:
                     return new Color(0.9f, 0.2f, 0.2f);
                     
-                case NodeType.Vector3Create:
-                case NodeType.TransformPositionRead:
-                case NodeType.TransformPositionSet:
+                // Unity
+                case NodeType.UnityVector3:
+                case NodeType.UnityGetPosition:
+                case NodeType.UnitySetPosition:
                     return new Color(0.2f, 0.7f, 0.9f);
                     
+                // Debug
                 case NodeType.DebugLog:
                     return new Color(0.6f, 0.6f, 0.6f);
                     
@@ -103,25 +110,39 @@ namespace CustomVisualScripting.Integration
         {
             switch (type)
             {
-                case NodeType.VariableInt: return "Int";
-                case NodeType.VariableFloat: return "Float";
-                case NodeType.VariableString: return "String";
-                case NodeType.VariableBool: return "Bool";
+                // Литералы
+                case NodeType.LiteralBool: return "Bool";
+                case NodeType.LiteralInt: return "Int";
+                case NodeType.LiteralFloat: return "Float";
+                case NodeType.LiteralString: return "String";
+                
+                // Математика
                 case NodeType.MathAdd: return "Add";
                 case NodeType.MathSubtract: return "Subtract";
                 case NodeType.MathMultiply: return "Multiply";
                 case NodeType.MathDivide: return "Divide";
+                
+                // Сравнения
+                case NodeType.CompareEqual: return "Equal";
                 case NodeType.CompareGreater: return "Greater";
                 case NodeType.CompareLess: return "Less";
-                case NodeType.CompareEqual: return "Equal";
+                
+                // Переменные
                 case NodeType.VariableDeclaration: return "Declare";
-                case NodeType.VariableRead: return "Get";
-                case NodeType.VariableAssignment: return "Set";
-                case NodeType.IfStatement: return "If";
-                case NodeType.Vector3Create: return "Vector3";
-                case NodeType.TransformPositionRead: return "Get Position";
-                case NodeType.TransformPositionSet: return "Set Position";
+                case NodeType.VariableGet: return "Get Variable";
+                case NodeType.VariableSet: return "Set Variable";
+                
+                // Flow
+                case NodeType.FlowIf: return "If";
+                
+                // Unity
+                case NodeType.UnityVector3: return "Vector3";
+                case NodeType.UnityGetPosition: return "Get Position";
+                case NodeType.UnitySetPosition: return "Set Position";
+                
+                // Debug
                 case NodeType.DebugLog: return "Debug Log";
+                
                 default: return type.ToString();
             }
         }
