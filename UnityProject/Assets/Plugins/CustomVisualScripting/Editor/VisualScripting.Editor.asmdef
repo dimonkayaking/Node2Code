@@ -1,0 +1,22 @@
+{
+    "name": "CustomVisualScripting.Editor",
+    "rootNamespace": "",
+    "references": [
+        "CustomVisualScripting.Runtime",
+        "VisualScripting.Core"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "VisualScripting.Core.dll",
+        "Microsoft.CodeAnalysis.dll",
+        "Microsoft.CodeAnalysis.CSharp.dll",
+        "System.Collections.Immutable.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,29 @@
+{
+  "name": "com.yourcompany.visualscripting",
+  "version": "1.0.0",
+  "displayName": "Visual Scripting",
+  "description": "Двунаправленный мост между C# кодом и визуальными нодами для Unity",
+  "unity": "2026.1",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/yourcompany/VisualScripting/wiki",
+  "changelogUrl": "https://github.com/yourcompany/VisualScripting/releases",
+  "licensesUrl": "https://github.com/yourcompany/VisualScripting/blob/main/LICENSE",
+  "keywords": [
+    "visual",
+    "scripting",
+    "nodes",
+    "graph",
+    "visual-scripting",
+    "node-graph",
+    "csharp",
+    "unity"
+  ],
+  "author": {
+    "name": "Your Company Name",
+    "email": "info@yourcompany.com",
+    "url": "https://yourcompany.com"
+  },
+  "dependencies": {
+    "com.alelievr.node-graph-processor": "https://github.com/alelievr/NodeGraphProcessor.git"
+  }
+}

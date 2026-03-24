@@ -410,7 +410,6 @@ FodyWeavers.xsd
 ## Visual studio for Mac
 ##
 
-
 # globs
 Makefile.in
 *.userprefs
@@ -432,7 +431,6 @@ test-results/
 
 # Icon must end with two \r
 Icon
-
 
 # Thumbnails
 ._*
@@ -480,3 +478,10 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# ===== ИСКЛЮЧЕНИЯ ДЛЯ ПЛАГИНА VISUAL SCRIPTING =====
+# Не игнорируем наши папки внутри плагина!
+!UnityProject/Assets/Plugins/CustomVisualScripting/Editor/Nodes/Debug/
+!UnityProject/Assets/Plugins/CustomVisualScripting/Editor/Integration/
+!UnityProject/Assets/Plugins/CustomVisualScripting/Editor/Windows/
+!UnityProject/Assets/Plugins/CustomVisualScripting/Runtime/

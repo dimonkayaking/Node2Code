@@ -1,0 +1,93 @@
+/* Toolbar */
+.toolbar {
+    background-color: rgb(37, 37, 38);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(51, 51, 51);
+    padding: 4px 8px;
+    flex-direction: row;
+}
+
+.toolbar-button {
+    background-color: rgb(51, 51, 51);
+    border-width: 0;
+    border-radius: 4px;
+    color: white;
+    padding: 4px 12px;
+    margin: 0 4px;
+    font-size: 12px;
+}
+
+.toolbar-button:hover {
+    background-color: rgb(68, 68, 68);
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 20px;
+    background-color: rgb(68, 68, 68);
+    margin: 0 8px;
+}
+
+.toolbar-status {
+    color: rgb(153, 153, 153);
+    font-size: 11px;
+    margin-left: 8px;
+}
+
+/* Code Editor */
+.code-editor {
+    background-color: rgb(30, 30, 30);
+    padding: 5px;
+}
+
+.code-editor-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+    margin-bottom: 5px;
+}
+
+.code-editor-field {
+    background-color: rgb(45, 45, 45);
+    color: rgb(220, 220, 220);
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+}
+
+/* Error Panel */
+.error-panel {
+    background-color: rgb(51, 26, 26);
+    border-top-width: 2px;
+    border-top-color: rgb(204, 51, 51);
+    padding: 5px 10px;
+    min-height: 100px;
+}
+
+.error-title {
+    color: rgb(255, 128, 128);
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.error-list {
+    margin-top: 5px;
+    flex-grow: 1;
+}
+
+.error-item {
+    color: rgb(255, 178, 178);
+    padding: 2px 0;
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+/* Graph Container */
+.graph-container {
+    background-color: rgb(35, 35, 35);
+}
+
+.graph-placeholder {
+    color: rgb(102, 102, 102);
+    margin-top: 20px;
+    margin-left: 10px;
+}
