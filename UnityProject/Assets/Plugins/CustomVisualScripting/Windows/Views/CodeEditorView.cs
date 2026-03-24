@@ -36,7 +36,8 @@ namespace CustomVisualScripting.Windows.Views
             _textField.style.unityTextAlign = TextAnchor.UpperLeft;
             _textField.style.color = new Color(0.9f, 0.9f, 0.9f);
             _textField.style.fontSize = 13;
-            _textField.style.fontFamily = "Courier New";
+            // Удалите или закомментируйте строку с fontFamily:
+            // _textField.style.fontFamily = "Courier New";
             
             Add(_textField);
             
