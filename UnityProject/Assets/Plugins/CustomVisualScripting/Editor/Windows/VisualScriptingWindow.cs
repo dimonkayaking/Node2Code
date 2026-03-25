@@ -371,9 +371,6 @@ namespace CustomVisualScripting.Editor.Windows
                 else if (node is CustomVisualScripting.Editor.Nodes.Literals.StringNode stringNode)
                     stringNode.stringValue = data.Value;
             }
-            
-            // Инициализируем узел и устанавливаем GUID
-            node.Enable();
         }
     }
     catch (Exception e)
