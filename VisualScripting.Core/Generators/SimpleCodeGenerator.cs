@@ -24,7 +24,6 @@ namespace VisualScripting.Core.Generators
             var nodeVariables = new Dictionary<string, string>();
             int tempCounter = 0;
             
-            // Сначала обрабатываем литералы
             var literals = graph.Nodes.Where(n => (int)n.Type >= 1 && (int)n.Type <= 4);
             foreach (var node in literals)
             {
@@ -33,28 +32,26 @@ namespace VisualScripting.Core.Generators
                 
                 switch ((int)node.Type)
                 {
-                    case 1: // LiteralInt
+                    case 1:
                         sb.AppendLine($"        int {varName} = {node.Value};");
                         break;
-                    case 2: // LiteralFloat
+                    case 2:
                         sb.AppendLine($"        float {varName} = {node.Value}f;");
                         break;
-                    case 3: // LiteralBool
+                    case 3:
                         sb.AppendLine($"        bool {varName} = {node.Value.ToLower()};");
                         break;
-                    case 4: // LiteralString
+                    case 4:
                         sb.AppendLine($"        string {varName} = \"{node.Value}\";");
                         break;
                 }
             }
             
-            // Обрабатываем операционные узлы
             int resultCounter = 0;
             var operations = graph.Nodes.Where(n => (int)n.Type >= 10 && (int)n.Type <= 13);
             
             foreach (var node in operations)
             {
-                // Находим входные узлы через связи
                 var inputNodes = graph.Edges
                     .Where(e => e.ToNodeId == node.Id)
                     .Select(e => e.FromNodeId)
@@ -71,16 +68,16 @@ namespace VisualScripting.Core.Generators
                     
                     switch ((int)node.Type)
                     {
-                        case 10: // MathAdd
+                        case 10:
                             sb.AppendLine($"        int {resultVar} = {leftVar} + {rightVar};");
                             break;
-                        case 11: // MathSubtract
+                        case 11:
                             sb.AppendLine($"        int {resultVar} = {leftVar} - {rightVar};");
                             break;
-                        case 12: // MathMultiply
+                        case 12:
                             sb.AppendLine($"        int {resultVar} = {leftVar} * {rightVar};");
                             break;
-                        case 13: // MathDivide
+                        case 13:
                             sb.AppendLine($"        int {resultVar} = {leftVar} / {rightVar};");
                             break;
                     }
