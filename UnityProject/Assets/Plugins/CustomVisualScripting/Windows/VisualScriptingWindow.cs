@@ -48,6 +48,11 @@ namespace CustomVisualScripting.Windows
         
         private void OnDisable()
         {
+            CleanupGraph();
+        }
+        
+        private void CleanupGraph()
+        {
             if (_graphView != null)
             {
                 _graphView.Dispose();
@@ -64,7 +69,6 @@ namespace CustomVisualScripting.Windows
         private void CreateGUI()
         {
             _currentGraph = new CompleteGraphData();
-            _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
             
             var root = rootVisualElement;
             
@@ -86,10 +90,11 @@ namespace CustomVisualScripting.Windows
             _graphContainer.style.backgroundColor = new StyleColor(new Color(0.22f, 0.22f, 0.22f));
             _graphContainer.style.flexGrow = 1;
             
-            var placeholder = new Label("Здесь будет граф");
+            var placeholder = new Label("Здесь будет граф\n\nНажмите 'Парсить код' для отображения");
             placeholder.style.marginTop = 20;
             placeholder.style.marginLeft = 10;
             placeholder.style.color = Color.gray;
+            placeholder.style.whiteSpace = WhiteSpace.Normal;
             _graphContainer.Add(placeholder);
             
             splitView.Add(_graphContainer);
@@ -142,17 +147,17 @@ namespace CustomVisualScripting.Windows
             if (string.IsNullOrEmpty(path)) return;
             
             // Сохраняем позиции узлов из визуального графа
-            if (_graphView != null)
+            if (_graphView != null && _currentGraph.VisualNodes != null)
             {
                 foreach (var nodeView in _graphView.nodeViews)
                 {
                     if (nodeView.nodeTarget is CustomBaseNode customNode)
                     {
-                        var nodeData = _currentGraph.LogicGraph.Nodes.FirstOrDefault(n => n.Id == customNode.NodeId);
-                        if (nodeData != null)
+                        var visualNode = _currentGraph.VisualNodes.FirstOrDefault(v => v.NodeId == customNode.NodeId);
+                        if (visualNode != null)
                         {
-                            nodeData.Value = customNode.ToNodeData().Value;
-                            nodeData.ValueType = customNode.ToNodeData().ValueType;
+                            visualNode.Position = nodeView.GetPosition().position;
+                            visualNode.IsCollapsed = nodeView.collapsed;
                         }
                     }
                 }
@@ -202,10 +207,11 @@ namespace CustomVisualScripting.Windows
             
             if (_currentGraph?.LogicGraph?.Nodes == null || _currentGraph.LogicGraph.Nodes.Count == 0)
             {
-                var placeholder = new Label("Нет нод для отображения");
+                var placeholder = new Label("Нет нод для отображения\n\nНажмите 'Парсить код' для создания графа");
                 placeholder.style.marginTop = 20;
                 placeholder.style.marginLeft = 10;
                 placeholder.style.color = Color.gray;
+                placeholder.style.whiteSpace = WhiteSpace.Normal;
                 _graphContainer.Add(placeholder);
                 return;
             }
@@ -213,10 +219,7 @@ namespace CustomVisualScripting.Windows
             try
             {
                 // Очищаем старый граф
-                if (_internalGraph != null)
-                {
-                    DestroyImmediate(_internalGraph);
-                }
+                CleanupGraph();
                 
                 // Создаем новый граф
                 _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
@@ -233,43 +236,79 @@ namespace CustomVisualScripting.Windows
                     }
                 }
                 
-                // Создаем визуальное представление
-                if (_graphView != null)
+                // Если нет узлов в графе
+                if (_internalGraph.nodes.Count == 0)
                 {
-                    _graphView.Dispose();
+                    var placeholder = new Label("Не удалось создать узлы для отображения");
+                    placeholder.style.marginTop = 20;
+                    placeholder.style.marginLeft = 10;
+                    placeholder.style.color = Color.yellow;
+                    _graphContainer.Add(placeholder);
+                    return;
                 }
                 
+                // Создаем визуальное представление
                 _graphView = new BaseGraphView();
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 
                 // Устанавливаем позиции узлов из сохраненных данных
-                if (_currentGraph.VisualNodes != null)
+                if (_currentGraph.VisualNodes != null && _currentGraph.VisualNodes.Count > 0)
                 {
-                    foreach (var visualNode in _currentGraph.VisualNodes)
+                    foreach (var nodeView in _graphView.nodeViews)
                     {
-                        var nodeView = _graphView.nodeViews.FirstOrDefault(v => 
-                            (v.nodeTarget as CustomBaseNode)?.NodeId == visualNode.NodeId);
-                        if (nodeView != null)
+                        if (nodeView.nodeTarget is CustomBaseNode customNode)
                         {
-                            nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
-                            nodeView.SetCollapsed(visualNode.IsCollapsed);
+                            var visualNode = _currentGraph.VisualNodes.FirstOrDefault(v => v.NodeId == customNode.NodeId);
+                            if (visualNode != null)
+                            {
+                                nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
+                                nodeView.SetCollapsed(visualNode.IsCollapsed);
+                            }
+                            else
+                            {
+                                // Случайная позиция для новых узлов
+                                nodeView.SetPosition(new Rect(100 + _graphView.nodeViews.IndexOf(nodeView) * 50, 
+                                                              100 + _graphView.nodeViews.IndexOf(nodeView) * 30, 
+                                                              Vector2.zero));
+                            }
                         }
                     }
                 }
+                else
+                {
+                    // Располагаем узлы сеткой
+                    int index = 0;
+                    foreach (var nodeView in _graphView.nodeViews)
+                    {
+                        float x = 100 + (index % 5) * 200;
+                        float y = 100 + (index / 5) * 150;
+                        nodeView.SetPosition(new Rect(x, y, Vector2.zero));
+                        index++;
+                    }
+                }
                 
-                _graphView.OnNodeSelected = (nodeView) => { /* TODO: выделение узла */ };
+                // Центрируем граф
+                _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
+                _graphView.FrameAll();
                 
                 _graphContainer.Add(_graphView);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[VS] Ошибка создания графа: {e.Message}");
                 
-                var errorLabel = new Label($"Ошибка отображения графа: {e.Message}");
+                // Принудительное обновление
+                _graphView.schedule.Execute(() => {
+                    _graphView.FrameAll();
+                    _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
+                }).ExecuteLater(50);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[VS] Ошибка создания графа: {e.Message}\n{e.StackTrace}");
+                
+                var errorLabel = new Label($"Ошибка отображения графа: {e.Message}\n\nПроверьте консоль для деталей");
                 errorLabel.style.color = Color.red;
                 errorLabel.style.marginTop = 20;
                 errorLabel.style.marginLeft = 10;
+                errorLabel.style.whiteSpace = WhiteSpace.Normal;
                 _graphContainer.Add(errorLabel);
             }
         }
@@ -302,27 +341,12 @@ namespace CustomVisualScripting.Windows
                 _ => null
             };
             
-            if (node != null)
-            {
-                node.InitializeFromData(data);
-            }
-            
             return node;
         }
         
         private void OnDestroy()
         {
-            if (_graphView != null)
-            {
-                _graphView.Dispose();
-                _graphView = null;
-            }
-            
-            if (_internalGraph != null)
-            {
-                DestroyImmediate(_internalGraph);
-                _internalGraph = null;
-            }
+            CleanupGraph();
         }
     }
 }
