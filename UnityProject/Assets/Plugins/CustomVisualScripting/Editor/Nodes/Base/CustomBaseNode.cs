@@ -14,12 +14,15 @@ namespace CustomVisualScripting.Editor.Nodes.Base
 
         public abstract NodeType NodeType { get; }
 
+        // Переопределяем GUID, чтобы использовать NodeId
+        public override string GUID => string.IsNullOrEmpty(NodeId) ? base.GUID : NodeId;
+
         protected override void Enable()
         {
             base.Enable();
             if (string.IsNullOrEmpty(NodeId))
             {
-                NodeId = GUID;
+                NodeId = System.Guid.NewGuid().ToString();
             }
         }
 
