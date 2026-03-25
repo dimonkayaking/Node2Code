@@ -1,38 +1,50 @@
-﻿namespace VisualScripting.Core.Models
+namespace VisualScripting.Core.Models
 {
     public enum NodeType
     {
         // Литералы
-        LiteralInt = 1,
-        LiteralFloat = 2,
-        LiteralBool = 3,
-        LiteralString = 4,
+        LiteralBool,
+        LiteralInt,
+        LiteralFloat,
+        LiteralString,
         
         // Математические операции
-        MathAdd = 10,
-        MathSubtract = 11,
-        MathMultiply = 12,
-        MathDivide = 13,
+        MathAdd,
+        MathSubtract,
+        MathMultiply,
+        MathDivide,
         
         // Сравнения
-        CompareEqual = 20,
-        CompareGreater = 21,
-        CompareLess = 22,
+        CompareEqual,
+        CompareGreater,
+        CompareLess,
         
         // Flow
-        FlowIf = 30,
+        FlowIf,
         
         // Debug
-        DebugLog = 40,
+        DebugLog,
         
         // Unity
-        UnityGetPosition = 50,
-        UnitySetPosition = 51,
-        UnityVector3 = 52,
+        UnityGetPosition,
+        UnitySetPosition,
+        UnityVector3,
         
         // Переменные
-        VariableGet = 60,
-        VariableSet = 61,
-        VariableDeclaration = 62
+        VariableGet,
+        VariableSet,
+        VariableDeclaration,
+        
+        // Дополнительные (для совместимости с NodeExecutor)
+        VariableInt,
+        VariableFloat,
+        VariableString,
+        VariableBool,
+        VariableRead,
+        VariableAssignment,
+        IfStatement,
+        TransformPositionRead,
+        TransformPositionSet,
+        Vector3Create
     }
 }
