@@ -231,7 +231,6 @@ namespace CustomVisualScripting.Windows
                     if (node != null)
                     {
                         node.NodeId = nodeData.Id;
-                        node.InitializeFromData(nodeData);
                         _internalGraph.AddNode(node);
                     }
                 }
@@ -252,7 +251,7 @@ namespace CustomVisualScripting.Windows
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 
-                // Устанавливаем позиции узлов из сохраненных данных
+                // Устанавливаем позиции узлов
                 if (_currentGraph.VisualNodes != null && _currentGraph.VisualNodes.Count > 0)
                 {
                     foreach (var nodeView in _graphView.nodeViews)
@@ -264,13 +263,6 @@ namespace CustomVisualScripting.Windows
                             {
                                 nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
                                 nodeView.SetCollapsed(visualNode.IsCollapsed);
-                            }
-                            else
-                            {
-                                // Случайная позиция для новых узлов
-                                nodeView.SetPosition(new Rect(100 + _graphView.nodeViews.IndexOf(nodeView) * 50, 
-                                                              100 + _graphView.nodeViews.IndexOf(nodeView) * 30, 
-                                                              Vector2.zero));
                             }
                         }
                     }
@@ -304,7 +296,7 @@ namespace CustomVisualScripting.Windows
             {
                 Debug.LogError($"[VS] Ошибка создания графа: {e.Message}\n{e.StackTrace}");
                 
-                var errorLabel = new Label($"Ошибка отображения графа: {e.Message}\n\nПроверьте консоль для деталей");
+                var errorLabel = new Label($"Ошибка отображения графа: {e.Message}");
                 errorLabel.style.color = Color.red;
                 errorLabel.style.marginTop = 20;
                 errorLabel.style.marginLeft = 10;
