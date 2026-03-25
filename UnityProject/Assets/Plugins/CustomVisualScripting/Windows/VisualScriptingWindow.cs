@@ -11,7 +11,7 @@ using CustomVisualScripting.Windows.Views;
 using VisualScripting.Core.Models;
 using CustomToolbar = CustomVisualScripting.Windows.Views.ToolbarView;
 
-namespace CustomVisualScripting.Windows
+namespace CustomVisualScripting.Editor.Windows
 {
     public class VisualScriptingWindow : EditorWindow
     {
@@ -149,7 +149,6 @@ namespace CustomVisualScripting.Windows
                         if (visualNode != null)
                         {
                             visualNode.Position = nodeView.GetPosition().position;
-                            visualNode.IsCollapsed = nodeView.collapsed;
                         }
                     }
                 }
@@ -234,7 +233,7 @@ namespace CustomVisualScripting.Windows
                     return;
                 }
                 
-                _graphView = new BaseGraphView();
+                _graphView = new BaseGraphView(this);
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 
@@ -247,8 +246,7 @@ namespace CustomVisualScripting.Windows
                             var visualNode = _currentGraph.VisualNodes.FirstOrDefault(v => v.NodeId == customNode.NodeId);
                             if (visualNode != null)
                             {
-                                nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
-                                nodeView.SetCollapsed(visualNode.IsCollapsed);
+                                nodeView.SetPosition(new Rect(visualNode.Position.x, visualNode.Position.y, 100, 50));
                             }
                         }
                     }
@@ -260,7 +258,7 @@ namespace CustomVisualScripting.Windows
                     {
                         float x = 100 + (index % 5) * 200;
                         float y = 100 + (index / 5) * 150;
-                        nodeView.SetPosition(new Rect(x, y, Vector2.zero));
+                        nodeView.SetPosition(new Rect(x, y, 100, 50));
                         index++;
                     }
                 }
