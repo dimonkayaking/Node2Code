@@ -213,18 +213,21 @@ namespace CustomVisualScripting.Editor.Windows
                 
                 _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
                 
+                var guidField = typeof(GraphProcessor.BaseNode).GetField("_GUID", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                
                 foreach (var nodeData in _currentGraph.LogicGraph.Nodes)
                 {
                     var node = CreateNodeFromData(nodeData);
                     if (node != null)
                     {
-                        // Принудительно вызываем Enable через рефлексию для инициализации GUID
-                        var enableMethod = typeof(GraphProcessor.BaseNode).GetMethod("Enable", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (enableMethod != null)
+                        if (guidField != null)
                         {
-                            enableMethod.Invoke(node, null);
+                            var currentGuid = guidField.GetValue(node);
+                            if (currentGuid == null || string.IsNullOrEmpty(currentGuid.ToString()))
+                            {
+                                guidField.SetValue(node, nodeData.Id);
+                            }
                         }
-                        
                         _internalGraph.AddNode(node);
                     }
                 }
@@ -365,14 +368,6 @@ namespace CustomVisualScripting.Editor.Windows
                 {
                     node.NodeId = data.Id;
                     
-                    // Устанавливаем GUID через рефлексию
-                    var guidField = typeof(GraphProcessor.BaseNode).GetField("_GUID", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (guidField != null)
-                    {
-                        guidField.SetValue(node, data.Id);
-                    }
-                    
-                    // Устанавливаем значения
                     if (!string.IsNullOrEmpty(data.Value))
                     {
                         if (node is CustomVisualScripting.Editor.Nodes.Literals.IntNode intNode && int.TryParse(data.Value, out int intVal))
