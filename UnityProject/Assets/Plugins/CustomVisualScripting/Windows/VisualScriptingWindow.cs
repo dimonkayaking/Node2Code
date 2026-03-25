@@ -8,14 +8,6 @@ using GraphProcessor;
 using CustomVisualScripting.Integration;
 using CustomVisualScripting.Integration.Models;
 using CustomVisualScripting.Windows.Views;
-using CustomVisualScripting.Editor.Nodes.Base;
-using CustomVisualScripting.Editor.Nodes.Literals;
-using CustomVisualScripting.Editor.Nodes.Math;
-using CustomVisualScripting.Editor.Nodes.Comparison;
-using CustomVisualScripting.Editor.Nodes.Flow;
-using CustomVisualScripting.Editor.Nodes.Debug;
-using CustomVisualScripting.Editor.Nodes.Unity;
-using CustomVisualScripting.Editor.Nodes.Variables;
 using VisualScripting.Core.Models;
 using CustomToolbar = CustomVisualScripting.Windows.Views.ToolbarView;
 
@@ -300,29 +292,49 @@ namespace CustomVisualScripting.Windows
         {
             if (data == null) return null;
             
-            return data.Type switch
+            switch (data.Type)
             {
-                NodeType.LiteralInt => new CustomVisualScripting.Editor.Nodes.Literals.IntNode(),
-                NodeType.LiteralFloat => new CustomVisualScripting.Editor.Nodes.Literals.FloatNode(),
-                NodeType.LiteralBool => new CustomVisualScripting.Editor.Nodes.Literals.BoolNode(),
-                NodeType.LiteralString => new CustomVisualScripting.Editor.Nodes.Literals.StringNode(),
-                NodeType.MathAdd => new CustomVisualScripting.Editor.Nodes.Math.AddNode(),
-                NodeType.MathSubtract => new CustomVisualScripting.Editor.Nodes.Math.SubtractNode(),
-                NodeType.MathMultiply => new CustomVisualScripting.Editor.Nodes.Math.MultiplyNode(),
-                NodeType.MathDivide => new CustomVisualScripting.Editor.Nodes.Math.DivideNode(),
-                NodeType.CompareEqual => new CustomVisualScripting.Editor.Nodes.Comparison.EqualNode(),
-                NodeType.CompareGreater => new CustomVisualScripting.Editor.Nodes.Comparison.GreaterNode(),
-                NodeType.CompareLess => new CustomVisualScripting.Editor.Nodes.Comparison.LessNode(),
-                NodeType.FlowIf => new CustomVisualScripting.Editor.Nodes.Flow.IfNode(),
-                NodeType.DebugLog => new CustomVisualScripting.Editor.Nodes.Debug.DebugLogNode(),
-                NodeType.UnityGetPosition => new CustomVisualScripting.Editor.Nodes.Unity.GetPositionNode(),
-                NodeType.UnitySetPosition => new CustomVisualScripting.Editor.Nodes.Unity.SetPositionNode(),
-                NodeType.UnityVector3 => new CustomVisualScripting.Editor.Nodes.Unity.Vector3CreateNode(),
-                NodeType.VariableGet => new CustomVisualScripting.Editor.Nodes.Variables.GetVariableNode(),
-                NodeType.VariableSet => new CustomVisualScripting.Editor.Nodes.Variables.SetVariableNode(),
-                NodeType.VariableDeclaration => new CustomVisualScripting.Editor.Nodes.Variables.VariableDeclarationNode(),
-                _ => null
-            };
+                case NodeType.LiteralInt:
+                    return new CustomVisualScripting.Editor.Nodes.Literals.IntNode();
+                case NodeType.LiteralFloat:
+                    return new CustomVisualScripting.Editor.Nodes.Literals.FloatNode();
+                case NodeType.LiteralBool:
+                    return new CustomVisualScripting.Editor.Nodes.Literals.BoolNode();
+                case NodeType.LiteralString:
+                    return new CustomVisualScripting.Editor.Nodes.Literals.StringNode();
+                case NodeType.MathAdd:
+                    return new CustomVisualScripting.Editor.Nodes.Math.AddNode();
+                case NodeType.MathSubtract:
+                    return new CustomVisualScripting.Editor.Nodes.Math.SubtractNode();
+                case NodeType.MathMultiply:
+                    return new CustomVisualScripting.Editor.Nodes.Math.MultiplyNode();
+                case NodeType.MathDivide:
+                    return new CustomVisualScripting.Editor.Nodes.Math.DivideNode();
+                case NodeType.CompareEqual:
+                    return new CustomVisualScripting.Editor.Nodes.Comparison.EqualNode();
+                case NodeType.CompareGreater:
+                    return new CustomVisualScripting.Editor.Nodes.Comparison.GreaterNode();
+                case NodeType.CompareLess:
+                    return new CustomVisualScripting.Editor.Nodes.Comparison.LessNode();
+                case NodeType.FlowIf:
+                    return new CustomVisualScripting.Editor.Nodes.Flow.IfNode();
+                case NodeType.DebugLog:
+                    return new CustomVisualScripting.Editor.Nodes.Debug.DebugLogNode();
+                case NodeType.UnityGetPosition:
+                    return new CustomVisualScripting.Editor.Nodes.Unity.GetPositionNode();
+                case NodeType.UnitySetPosition:
+                    return new CustomVisualScripting.Editor.Nodes.Unity.SetPositionNode();
+                case NodeType.UnityVector3:
+                    return new CustomVisualScripting.Editor.Nodes.Unity.Vector3CreateNode();
+                case NodeType.VariableGet:
+                    return new CustomVisualScripting.Editor.Nodes.Variables.GetVariableNode();
+                case NodeType.VariableSet:
+                    return new CustomVisualScripting.Editor.Nodes.Variables.SetVariableNode();
+                case NodeType.VariableDeclaration:
+                    return new CustomVisualScripting.Editor.Nodes.Variables.VariableDeclarationNode();
+                default:
+                    return null;
+            }
         }
         
         private void OnDestroy()
