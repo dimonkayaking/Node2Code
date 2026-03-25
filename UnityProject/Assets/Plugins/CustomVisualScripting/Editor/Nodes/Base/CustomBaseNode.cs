@@ -22,14 +22,24 @@ namespace CustomVisualScripting.Editor.Nodes.Base
                 NodeId = System.Guid.NewGuid().ToString();
                 SetGUID(NodeId);
             }
+            else
+            {
+                SetGUID(NodeId);
+            }
         }
 
         public void SetGUID(string guid)
         {
+            if (string.IsNullOrEmpty(guid)) return;
+            
             var guidField = typeof(GraphProcessor.BaseNode).GetField("_GUID", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             if (guidField != null)
             {
-                guidField.SetValue(this, guid);
+                var currentValue = guidField.GetValue(this);
+                if (currentValue == null || string.IsNullOrEmpty(currentValue.ToString()))
+                {
+                    guidField.SetValue(this, guid);
+                }
             }
         }
 
