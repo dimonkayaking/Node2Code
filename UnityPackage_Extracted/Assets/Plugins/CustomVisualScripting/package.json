@@ -1,0 +1,16 @@
+﻿{
+  "name": "com.custom.visualscripting",
+  "version": "1.0.0",
+  "displayName": "Custom Visual Scripting",
+  "description": "Visual scripting system for Unity with GraphProcessor integration",
+  "unity": "2022.3",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.warwlock.node-graph-processor": "https://github.com/Warwlock/NodeGraphProcessor.git"
+  },
+  "keywords": ["visual", "scripting", "graph", "node"],
+  "author": {
+    "name": "Your Name",
+    "email": "your@email.com"
+  }
+}

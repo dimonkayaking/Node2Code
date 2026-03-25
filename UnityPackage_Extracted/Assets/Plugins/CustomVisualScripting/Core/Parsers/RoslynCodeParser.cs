@@ -1,4 +1,4 @@
-using VisualScripting.Core.Models;
+﻿using VisualScripting.Core.Models;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
@@ -7,10 +7,12 @@ namespace VisualScripting.Core.Parsers
     public class RoslynCodeParser
     {
         private int _nodeCounter;
+        private Dictionary<string, string> _variables = new Dictionary<string, string>();
         
         public ParseResult Parse(string code)
         {
             _nodeCounter = 0;
+            _variables.Clear();
             var graph = new GraphData();
             var errors = new List<string>();
             
@@ -22,13 +24,14 @@ namespace VisualScripting.Core.Parsers
             
             try
             {
-                // Парсим литералы: int x = 10;
-                var literalPattern = @"(\w+)\s+(\w+)\s*=\s*(\d+|""[^""]*""|true|false);";
-                var literalMatches = Regex.Matches(code, literalPattern);
+                // Парсим объявления переменных
+                var declarationPattern = @"(\w+)\s+(\w+)\s*=\s*(\d+|""[^""]*""|true|false);";
+                var declarationMatches = Regex.Matches(code, declarationPattern);
                 
-                foreach (Match match in literalMatches)
+                foreach (Match match in declarationMatches)
                 {
                     var type = match.Groups[1].Value;
+                    var varName = match.Groups[2].Value;
                     var value = match.Groups[3].Value;
                     
                     NodeType nodeType;
@@ -38,22 +41,29 @@ namespace VisualScripting.Core.Parsers
                     else if (type == "bool") nodeType = NodeType.LiteralBool;
                     else continue;
                     
-                    graph.Nodes.Add(new NodeData
+                    var nodeId = GenerateId();
+                    var node = new NodeData
                     {
-                        Id = GenerateId(),
+                        Id = nodeId,
                         Type = nodeType,
                         Value = value,
                         ValueType = type
-                    });
+                    };
+                    graph.Nodes.Add(node);
+                    _variables[varName] = nodeId;
                 }
                 
-                // Парсим операции: a + b
+                // Парсим операции
                 var operationPattern = @"(\w+)\s*=\s*(\w+)\s*([\+\-\*/])\s*(\w+);";
                 var operationMatches = Regex.Matches(code, operationPattern);
                 
                 foreach (Match match in operationMatches)
                 {
+                    var resultVar = match.Groups[1].Value;
+                    var leftVar = match.Groups[2].Value;
                     var op = match.Groups[3].Value;
+                    var rightVar = match.Groups[4].Value;
+                    
                     NodeType opType = op switch
                     {
                         "+" => NodeType.MathAdd,
@@ -63,43 +73,51 @@ namespace VisualScripting.Core.Parsers
                         _ => NodeType.MathAdd
                     };
                     
-                    graph.Nodes.Add(new NodeData
+                    var opNodeId = GenerateId();
+                    var opNode = new NodeData
                     {
-                        Id = GenerateId(),
+                        Id = opNodeId,
                         Type = opType,
                         Value = "",
                         ValueType = ""
-                    });
-                }
-                
-                // Парсим условие if
-                var ifPattern = @"if\s*\((.*?)\)";
-                var ifMatches = Regex.Matches(code, ifPattern);
-                
-                foreach (Match match in ifMatches)
-                {
-                    graph.Nodes.Add(new NodeData
+                    };
+                    graph.Nodes.Add(opNode);
+                    
+                    if (_variables.ContainsKey(leftVar))
                     {
-                        Id = GenerateId(),
-                        Type = NodeType.FlowIf,
-                        Value = match.Groups[1].Value,
-                        ValueType = ""
-                    });
-                }
-                
-                // Парсим Debug.Log
-                var debugPattern = @"Debug\.Log\((.*?)\)";
-                var debugMatches = Regex.Matches(code, debugPattern);
-                
-                foreach (Match match in debugMatches)
-                {
-                    graph.Nodes.Add(new NodeData
+                        graph.Edges.Add(new EdgeData
+                        {
+                            FromNodeId = _variables[leftVar],
+                            ToNodeId = opNodeId
+                        });
+                    }
+                    
+                    if (_variables.ContainsKey(rightVar))
                     {
-                        Id = GenerateId(),
-                        Type = NodeType.DebugLog,
-                        Value = match.Groups[1].Value,
-                        ValueType = ""
+                        graph.Edges.Add(new EdgeData
+                        {
+                            FromNodeId = _variables[rightVar],
+                            ToNodeId = opNodeId
+                        });
+                    }
+                    
+                    var resultNodeId = GenerateId();
+                    var resultNode = new NodeData
+                    {
+                        Id = resultNodeId,
+                        Type = NodeType.VariableDeclaration,
+                        Value = resultVar,
+                        ValueType = "var"
+                    };
+                    graph.Nodes.Add(resultNode);
+                    
+                    graph.Edges.Add(new EdgeData
+                    {
+                        FromNodeId = opNodeId,
+                        ToNodeId = resultNodeId
                     });
+                    
+                    _variables[resultVar] = resultNodeId;
                 }
             }
             catch (System.Exception ex)
