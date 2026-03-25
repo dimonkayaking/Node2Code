@@ -7,7 +7,7 @@ namespace VisualScripting.Core.Parsers
     public class RoslynCodeParser
     {
         private int _nodeCounter;
-        private Dictionary<string, string> _variables = new Dictionary<string, string>(); // ← инициализация
+        private Dictionary<string, string> _variables = new Dictionary<string, string>();
         
         public ParseResult Parse(string code)
         {
@@ -84,7 +84,7 @@ namespace VisualScripting.Core.Parsers
                     };
                     graph.Nodes.Add(opNode);
                     
-                    // Создаем связи
+                    // Создаем связи от переменных к операции
                     if (_variables.ContainsKey(leftVar))
                     {
                         graph.Edges.Add(new EdgeData
