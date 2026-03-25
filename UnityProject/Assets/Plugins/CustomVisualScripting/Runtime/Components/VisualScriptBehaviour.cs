@@ -6,32 +6,76 @@ namespace CustomVisualScripting.Runtime.Components
 {
     public class VisualScriptBehaviour : MonoBehaviour
     {
-        public GraphAsset graphAsset;
-        private GraphRunner runner;
-
+        [SerializeField] private GraphAsset _graphAsset;
+        [SerializeField] private bool _runOnStart = true;
+        [SerializeField] private bool _runOnUpdate = false;
+        
+        private GraphRunner _runner;
+        private bool _isRunning;
+        
+        void Awake()
+        {
+            _runner = new GraphRunner();
+        }
+        
         void Start()
         {
-            if (graphAsset != null && graphAsset.graphData != null)
+            if (_runOnStart && _graphAsset != null)
             {
-                runner = new GraphRunner(graphAsset.graphData, this);
-                runner.Start();
+                Run();
             }
         }
-
+        
         void Update()
         {
-            if (runner != null)
+            if (_runOnUpdate && _isRunning)
             {
-                runner.Update();
+                Run();
             }
         }
-
-        public void Execute()
+        
+        public void Run()
         {
-            if (runner != null)
+            if (_graphAsset == null || _graphAsset.graphData == null)
             {
-                runner.Start();
+                Debug.LogWarning("[VisualScriptBehaviour] Нет графа для выполнения");
+                return;
             }
+            
+            _isRunning = true;
+            _runner.Run(_graphAsset.graphData);
+        }
+        
+        public void Stop()
+        {
+            _isRunning = false;
+            _runner.Clear();
+        }
+        
+        public void SetGraph(GraphAsset graph)
+        {
+            _graphAsset = graph;
+        }
+        
+        public void SetVariable(string name, object value)
+        {
+            _runner?.SetVariable(name, value);
+        }
+        
+        public object GetVariable(string name)
+        {
+            return _runner?.GetVariable(name);
+        }
+        
+        void OnDisable()
+        {
+            Stop();
+        }
+        
+        void OnDestroy()
+        {
+            _runner?.Clear();
+            _runner = null;
         }
     }
 }
