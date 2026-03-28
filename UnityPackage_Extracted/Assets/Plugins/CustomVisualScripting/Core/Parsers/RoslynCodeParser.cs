@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using VisualScripting.Core.Models;
@@ -10,6 +11,13 @@ namespace VisualScripting.Core.Parsers
 {
     public class RoslynCodeParser
     {
+        /// <summary>Текст до вставки пользовательского кода; число '\n' = смещение строк в диагностиках.</summary>
+        private static readonly string WrapPrefix =
+            "static class __VsParseWrapper\n{\n    static void __VsParseMethod()\n    {\n";
+
+        private static readonly string WrapSuffix = "\n    }\n}";
+        private static readonly int WrapperNewlinesBeforeUser = WrapPrefix.Count(c => c == '\n');
+
         private int _nodeCounter;
         private GraphData _graph = null!;
         private List<string> _errors = null!;
@@ -28,13 +36,7 @@ namespace VisualScripting.Core.Parsers
                 return Result();
             }
 
-            var wrapped = $@"static class __VsParseWrapper
-{{
-    static void __VsParseMethod()
-    {{
-{code}
-    }}
-}}";
+            var wrapped = WrapPrefix + code + WrapSuffix;
 
             var tree = CSharpSyntaxTree.ParseText(
                 wrapped,
@@ -42,9 +44,8 @@ namespace VisualScripting.Core.Parsers
 
             foreach (var d in tree.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error))
             {
-                var pos = tree.GetLineSpan(d.Location.SourceSpan);
                 _errors.Add(
-                    $"{d.GetMessage()} ({pos.StartLinePosition.Line + 1}:{pos.StartLinePosition.Character + 1})");
+                    $"{d.GetMessage()} ({FormatUserLocation(tree, d.Location.SourceSpan)})");
             }
 
             if (_errors.Count > 0)
@@ -67,6 +68,18 @@ namespace VisualScripting.Core.Parsers
 
         private ParseResult Result() =>
             new ParseResult { Graph = _graph, Errors = _errors };
+
+        /// <summary>Строка:колонка относительно исходного кода пользователя (без служебной обёртки).</summary>
+        private static string FormatUserLocation(SyntaxTree tree, TextSpan span)
+        {
+            var pos = tree.GetLineSpan(span);
+            var line1 = pos.StartLinePosition.Line + 1;
+            var col1 = pos.StartLinePosition.Character + 1;
+            var userLine = line1 - WrapperNewlinesBeforeUser;
+            if (userLine < 1)
+                return $"{line1}:{col1} (служебная обёртка)";
+            return $"{userLine}:{col1}";
+        }
 
         private void VisitMethodBody(BlockSyntax body)
         {
@@ -115,9 +128,8 @@ namespace VisualScripting.Core.Parsers
 
         private void ReportUnsupported(SyntaxNode node)
         {
-            var span = node.SyntaxTree.GetLineSpan(node.Span);
             _errors.Add(
-                $"Неподдерживаемая конструкция ({span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}): {node.Kind()}. MVP: только объявления, присваивания и if/else.");
+                $"Неподдерживаемая конструкция ({FormatUserLocation(node.SyntaxTree, node.Span)}): {node.Kind()}. MVP: только объявления, присваивания и if/else.");
         }
 
         private FlowHost? VisitLocalDeclaration(LocalDeclarationStatementSyntax local, string? prevNode, string prevPort)
@@ -127,11 +139,17 @@ namespace VisualScripting.Core.Parsers
             {
                 var name = v.Identifier.Text;
 
+                if (_symbolToNodeId.ContainsKey(name))
+                {
+                    _errors.Add(
+                        $"Повторное объявление переменной «{name}» ({FormatUserLocation(local.SyntaxTree, v.Identifier.Span)}).");
+                    continue;
+                }
+
                 if (v.Initializer == null)
                 {
-                    var span = local.SyntaxTree.GetLineSpan(v.Span);
                     _errors.Add(
-                        $"Объявление без инициализатора не поддерживается ({span.StartLinePosition.Line + 1}).");
+                        $"Объявление без инициализатора не поддерживается ({FormatUserLocation(local.SyntaxTree, v.Span)}).");
                     continue;
                 }
 
@@ -310,9 +328,8 @@ namespace VisualScripting.Core.Parsers
 
                 default:
                     unsupported = true;
-                    var span = expr.SyntaxTree.GetLineSpan(expr.Span);
                     _errors.Add(
-                        $"Неподдерживаемое выражение ({span.StartLinePosition.Line + 1}): {expr.Kind()}.");
+                        $"Неподдерживаемое выражение ({FormatUserLocation(expr.SyntaxTree, expr.Span)}): {expr.Kind()}.");
                     return null;
             }
         }
@@ -342,9 +359,8 @@ namespace VisualScripting.Core.Parsers
             if (opType == null)
             {
                 unsupported = true;
-                var span = bin.SyntaxTree.GetLineSpan(bin.Span);
                 _errors.Add(
-                    $"Неподдерживаемый оператор ({span.StartLinePosition.Line + 1}): {kind}.");
+                    $"Неподдерживаемый оператор ({FormatUserLocation(bin.SyntaxTree, bin.Span)}): {kind}.");
                 return null;
             }
 
@@ -389,9 +405,8 @@ namespace VisualScripting.Core.Parsers
                 return nodeId;
 
             unsupported = true;
-            var span = id.SyntaxTree.GetLineSpan(id.Span);
             _errors.Add(
-                $"Неизвестный идентификатор «{name}» ({span.StartLinePosition.Line + 1}).");
+                $"Неизвестный идентификатор «{name}» ({FormatUserLocation(id.SyntaxTree, id.Span)}).");
             return null;
         }
 
@@ -433,9 +448,8 @@ namespace VisualScripting.Core.Parsers
                     break;
 
                 default:
-                    var span = lit.SyntaxTree.GetLineSpan(lit.Span);
                     _errors.Add(
-                        $"Неподдерживаемый литерал ({span.StartLinePosition.Line + 1}): {lit.Kind()}.");
+                        $"Неподдерживаемый литерал ({FormatUserLocation(lit.SyntaxTree, lit.Span)}): {lit.Kind()}.");
                     return null;
             }
 

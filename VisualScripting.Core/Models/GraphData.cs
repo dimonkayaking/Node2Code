@@ -10,9 +10,9 @@ namespace VisualScripting.Core.Models
 
     public class EdgeData
     {
-        public string FromNodeId { get; set; }
-        public string FromPort { get; set; }
-        public string ToNodeId { get; set; }
-        public string ToPort { get; set; }
+        public string FromNodeId { get; set; } = "";
+        public string FromPort { get; set; } = "";
+        public string ToNodeId { get; set; } = "";
+        public string ToPort { get; set; } = "";
     }
 }
