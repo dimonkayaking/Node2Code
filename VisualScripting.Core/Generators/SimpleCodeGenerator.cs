@@ -7,104 +7,351 @@ namespace VisualScripting.Core.Generators
 {
     public class SimpleCodeGenerator
     {
-        public string GenerateCode(GraphData graph) => GenerateMvp(graph);
+        private Dictionary<string, NodeData> _map = new();
+        private GraphData _graph = new();
+        private HashSet<string> _declared = new();
+        private HashSet<string> _emitted = new();
 
-        public string Generate(GraphData graph) => GenerateMvp(graph);
+        public string GenerateCode(GraphData graph) => Generate(graph);
 
-        private static string GenerateMvp(GraphData graph)
+        public string Generate(GraphData graph)
         {
             if (graph == null || graph.Nodes.Count == 0)
                 return "// Нет узлов для генерации";
 
-            var map = graph.Nodes.ToDictionary(n => n.Id);
-            var sb = new StringBuilder();
+            _graph = graph;
+            _map = graph.Nodes.ToDictionary(n => n.Id);
+            _declared = new HashSet<string>();
+            _emitted = new HashSet<string>();
 
-            foreach (var node in graph.Nodes)
+            var hasIncomingExec = new HashSet<string>(
+                graph.Edges.Where(e => e.ToPort == "execIn").Select(e => e.ToNodeId));
+
+            var flowParticipants = new HashSet<string>();
+            foreach (var e in graph.Edges)
             {
-                if (IsLiteral(node.Type) && !string.IsNullOrEmpty(node.VariableName))
-                {
-                    sb.AppendLine($"{KeywordFor(node.ValueType)} {node.VariableName} = {LiteralRhs(node)};");
-                    continue;
-                }
-
-                if (IsMath(node.Type) && !string.IsNullOrEmpty(node.VariableName))
-                {
-                    sb.AppendLine(
-                        $"{KeywordFor(InferResultType(graph, map, node))} {node.VariableName} = {EmitMathExpr(graph, map, node)};");
-                }
+                if (e.FromPort is "execOut" or "true" or "false")
+                    flowParticipants.Add(e.FromNodeId);
+                if (e.ToPort == "execIn")
+                    flowParticipants.Add(e.ToNodeId);
             }
+
+            var roots = graph.Nodes
+                .Where(n => flowParticipants.Contains(n.Id) && !hasIncomingExec.Contains(n.Id))
+                .ToList();
+
+            if (roots.Count == 0)
+                return GenerateFallback();
+
+            var sb = new StringBuilder();
+            foreach (var root in roots)
+                EmitChain(root.Id, sb, 0);
 
             return sb.ToString().TrimEnd();
         }
 
-        private static string InferResultType(GraphData graph, Dictionary<string, NodeData> map, NodeData node)
+        private string GenerateFallback()
         {
-            var leftE = graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputA");
-            if (leftE == null)
+            var sb = new StringBuilder();
+            foreach (var node in _graph.Nodes)
+            {
+                if (IsLiteral(node.Type) && !string.IsNullOrEmpty(node.VariableName))
+                {
+                    sb.AppendLine($"{KeywordFor(node.ValueType)} {node.VariableName} = {LiteralRhs(node)};");
+                    _declared.Add(node.VariableName);
+                }
+                else if (IsBinaryOp(node.Type) && !string.IsNullOrEmpty(node.VariableName))
+                {
+                    var type = InferResultType(node);
+                    sb.AppendLine($"{KeywordFor(type)} {node.VariableName} = {EmitStmtExpr(node.Id)};");
+                    _declared.Add(node.VariableName);
+                }
+            }
+            return sb.ToString().TrimEnd();
+        }
+
+        private void EmitChain(string nodeId, StringBuilder sb, int indent)
+        {
+            if (_emitted.Contains(nodeId))
+                return;
+            _emitted.Add(nodeId);
+
+            var node = _map[nodeId];
+            var pad = Pad(indent);
+
+            switch (node.Type)
+            {
+                case NodeType.FlowIf:
+                    EmitIf(node, sb, indent);
+                    break;
+
+                case NodeType.FlowElse:
+                    break;
+
+                case NodeType.VariableDeclaration:
+                    _declared.Add(node.VariableName);
+                    sb.AppendLine($"{pad}{KeywordFor(node.ValueType)} {node.VariableName};");
+                    break;
+
+                case NodeType.VariableSet:
+                    EmitVarSet(node, sb, pad);
+                    break;
+
+                default:
+                    EmitValueStatement(node, sb, pad);
+                    break;
+            }
+
+            var next = _graph.Edges.FirstOrDefault(
+                e => e.FromNodeId == nodeId && e.FromPort == "execOut");
+            if (next != null)
+                EmitChain(next.ToNodeId, sb, indent);
+        }
+
+        private void EmitVarSet(NodeData node, StringBuilder sb, string pad)
+        {
+            var valueEdge = _graph.Edges.FirstOrDefault(
+                e => e.ToNodeId == node.Id && e.ToPort == "value");
+            if (valueEdge != null)
+            {
+                var expr = EmitCondExpr(valueEdge.FromNodeId);
+                sb.AppendLine($"{pad}{node.VariableName} = {expr};");
+            }
+            _declared.Add(node.VariableName);
+        }
+
+        private void EmitValueStatement(NodeData node, StringBuilder sb, string pad)
+        {
+            var vn = node.VariableName;
+            if (string.IsNullOrEmpty(vn))
+                return;
+
+            if (IsLiteral(node.Type))
+            {
+                if (_declared.Contains(vn))
+                    sb.AppendLine($"{pad}{vn} = {LiteralRhs(node)};");
+                else
+                {
+                    _declared.Add(vn);
+                    sb.AppendLine($"{pad}{KeywordFor(node.ValueType)} {vn} = {LiteralRhs(node)};");
+                }
+                return;
+            }
+
+            if (IsBinaryOp(node.Type) || node.Type == NodeType.LogicalNot)
+            {
+                var expr = EmitStmtExpr(node.Id);
+                if (_declared.Contains(vn))
+                    sb.AppendLine($"{pad}{vn} = {expr};");
+                else
+                {
+                    _declared.Add(vn);
+                    sb.AppendLine($"{pad}{KeywordFor(InferResultType(node))} {vn} = {expr};");
+                }
+            }
+        }
+
+        private void EmitIf(NodeData ifNode, StringBuilder sb, int indent, bool inline = false)
+        {
+            var pad = Pad(indent);
+
+            var condEdge = _graph.Edges.FirstOrDefault(
+                e => e.ToNodeId == ifNode.Id && e.ToPort == "condition");
+            var condExpr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "true";
+
+            if (inline)
+                sb.AppendLine($"if ({condExpr})");
+            else
+                sb.AppendLine($"{pad}if ({condExpr})");
+
+            sb.AppendLine($"{pad}{{");
+
+            var trueEdge = _graph.Edges.FirstOrDefault(
+                e => e.FromNodeId == ifNode.Id && e.FromPort == "true");
+            if (trueEdge != null)
+                EmitChain(trueEdge.ToNodeId, sb, indent + 1);
+
+            sb.AppendLine($"{pad}}}");
+
+            var falseEdge = _graph.Edges.FirstOrDefault(
+                e => e.FromNodeId == ifNode.Id && e.FromPort == "false");
+            if (falseEdge == null || !_map.ContainsKey(falseEdge.ToNodeId))
+                return;
+
+            var target = _map[falseEdge.ToNodeId];
+
+            if (target.Type == NodeType.FlowIf)
+            {
+                _emitted.Add(target.Id);
+                sb.Append($"{pad}else ");
+                EmitIf(target, sb, indent, inline: true);
+            }
+            else if (target.Type == NodeType.FlowElse)
+            {
+                _emitted.Add(target.Id);
+                sb.AppendLine($"{pad}else");
+                sb.AppendLine($"{pad}{{");
+
+                var bodyEdge = _graph.Edges.FirstOrDefault(
+                    e => e.FromNodeId == target.Id && e.FromPort == "execOut");
+                if (bodyEdge != null)
+                    EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+
+                sb.AppendLine($"{pad}}}");
+            }
+        }
+
+        private string EmitExpr(string nodeId) => EmitCore(nodeId, true, null);
+        private string EmitCondExpr(string nodeId) => EmitCore(nodeId, false, null);
+        private string EmitStmtExpr(string nodeId) => EmitCore(nodeId, false, nodeId);
+
+        private string EmitCore(string nodeId, bool wrap, string? selfId)
+        {
+            if (!_map.ContainsKey(nodeId))
+                return "???";
+
+            var node = _map[nodeId];
+
+            if (!string.IsNullOrEmpty(node.VariableName) && nodeId != selfId)
+                return node.VariableName;
+
+            if (IsLiteral(node.Type))
+                return LiteralRhs(node);
+
+            if (IsMath(node.Type))
+            {
+                var l = Input(nodeId, "inputA");
+                var r = Input(nodeId, "inputB");
+                if (l == null || r == null) return "???";
+                var expr = $"{EmitExpr(l)} {MathOp(node.Type)} {EmitExpr(r)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (IsCompare(node.Type))
+            {
+                var l = Input(nodeId, "left");
+                var r = Input(nodeId, "right");
+                if (l == null || r == null) return "???";
+                var expr = $"{EmitExpr(l)} {CmpOp(node.Type)} {EmitExpr(r)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (node.Type is NodeType.LogicalAnd or NodeType.LogicalOr)
+            {
+                var l = Input(nodeId, "left");
+                var r = Input(nodeId, "right");
+                if (l == null || r == null) return "???";
+                var op = node.Type == NodeType.LogicalAnd ? "&&" : "||";
+                var expr = $"{EmitExpr(l)} {op} {EmitExpr(r)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (node.Type == NodeType.LogicalNot)
+            {
+                var i = Input(nodeId, "input");
+                if (i == null) return "???";
+                return $"!{EmitExpr(i)}";
+            }
+
+            if (node.Type == NodeType.VariableSet && !string.IsNullOrEmpty(node.VariableName))
+                return node.VariableName;
+
+            if (node.Type == NodeType.VariableDeclaration && !string.IsNullOrEmpty(node.VariableName))
+                return node.VariableName;
+
+            return "???";
+        }
+
+        private string? Input(string nodeId, string port)
+        {
+            var edge = _graph.Edges.FirstOrDefault(
+                e => e.ToNodeId == nodeId && e.ToPort == port);
+            return edge?.FromNodeId;
+        }
+
+        private string InferResultType(NodeData node)
+        {
+            if (IsCompare(node.Type) || IsLogical(node.Type))
+                return "bool";
+
+            if (IsMath(node.Type))
+            {
+                var l = Input(node.Id, "inputA");
+                var r = Input(node.Id, "inputB");
+                if (l != null && OperandType(l) == "float") return "float";
+                if (r != null && OperandType(r) == "float") return "float";
                 return "int";
-            var ln = map[leftE.FromNodeId];
-            if (ln.Type == NodeType.LiteralFloat || ln.ValueType == "float")
-                return "float";
-            if (IsMath(ln.Type) && InferResultType(graph, map, ln) == "float")
-                return "float";
+            }
+
+            return !string.IsNullOrEmpty(node.ValueType) ? node.ValueType : "int";
+        }
+
+        private string OperandType(string nodeId)
+        {
+            if (!_map.ContainsKey(nodeId)) return "int";
+            var n = _map[nodeId];
+            if (!string.IsNullOrEmpty(n.ValueType)) return n.ValueType;
+            if (n.Type == NodeType.LiteralFloat) return "float";
+            if (IsMath(n.Type)) return InferResultType(n);
             return "int";
         }
 
-        private static string LiteralRhs(NodeData n) =>
-            n.ValueType switch
-            {
-                "string" => $"\"{n.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"",
-                "float" => $"{n.Value}f",
-                "bool" => n.Value.ToLowerInvariant(),
-                _ => n.Value
-            };
+        private static string Pad(int indent) => new string(' ', indent * 4);
 
-        private static string KeywordFor(string valueType) =>
-            valueType switch
-            {
-                "float" => "float",
-                "bool" => "bool",
-                "string" => "string",
-                _ => "int"
-            };
-
-        private static string EmitMathExpr(GraphData graph, Dictionary<string, NodeData> map, NodeData node)
+        private static string LiteralRhs(NodeData n) => n.ValueType switch
         {
-            var leftE = graph.Edges.First(e => e.ToNodeId == node.Id && e.ToPort == "inputA");
-            var rightE = graph.Edges.First(e => e.ToNodeId == node.Id && e.ToPort == "inputB");
-            var op = node.Type switch
-            {
-                NodeType.MathAdd => "+",
-                NodeType.MathSubtract => "-",
-                NodeType.MathMultiply => "*",
-                NodeType.MathDivide => "/",
-                NodeType.MathModulo => "%",
-                _ => "+"
-            };
-            return $"{EmitOperand(graph, map, leftE.FromNodeId)} {op} {EmitOperand(graph, map, rightE.FromNodeId)}";
-        }
+            "string" => $"\"{n.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"",
+            "float" => $"{n.Value}f",
+            "bool" => n.Value.ToLowerInvariant(),
+            _ => n.Value
+        };
 
-        private static string EmitOperand(GraphData graph, Dictionary<string, NodeData> map, string nodeId)
+        private static string KeywordFor(string? vt) => vt switch
         {
-            var n = map[nodeId];
-            if (IsLiteral(n.Type))
-            {
-                if (!string.IsNullOrEmpty(n.VariableName))
-                    return n.VariableName;
-                return LiteralRhs(n);
-            }
+            "float" => "float",
+            "bool" => "bool",
+            "string" => "string",
+            _ => "int"
+        };
 
-            if (IsMath(n.Type))
-                return $"({EmitMathExpr(graph, map, n)})";
+        private static string MathOp(NodeType t) => t switch
+        {
+            NodeType.MathAdd => "+",
+            NodeType.MathSubtract => "-",
+            NodeType.MathMultiply => "*",
+            NodeType.MathDivide => "/",
+            NodeType.MathModulo => "%",
+            _ => "+"
+        };
 
-            return n.VariableName;
-        }
+        private static string CmpOp(NodeType t) => t switch
+        {
+            NodeType.CompareEqual => "==",
+            NodeType.CompareNotEqual => "!=",
+            NodeType.CompareGreater => ">",
+            NodeType.CompareLess => "<",
+            NodeType.CompareGreaterOrEqual => ">=",
+            NodeType.CompareLessOrEqual => "<=",
+            _ => "=="
+        };
 
         private static bool IsLiteral(NodeType t) =>
-            t is NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString;
+            t is NodeType.LiteralBool or NodeType.LiteralInt
+                or NodeType.LiteralFloat or NodeType.LiteralString;
 
         private static bool IsMath(NodeType t) =>
-            t is NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply or NodeType.MathDivide
-                or NodeType.MathModulo;
+            t is NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply
+                or NodeType.MathDivide or NodeType.MathModulo;
+
+        private static bool IsCompare(NodeType t) =>
+            t is NodeType.CompareEqual or NodeType.CompareNotEqual
+                or NodeType.CompareGreater or NodeType.CompareLess
+                or NodeType.CompareGreaterOrEqual or NodeType.CompareLessOrEqual;
+
+        private static bool IsLogical(NodeType t) =>
+            t is NodeType.LogicalAnd or NodeType.LogicalOr or NodeType.LogicalNot;
+
+        private static bool IsBinaryOp(NodeType t) =>
+            IsMath(t) || IsCompare(t) || t is NodeType.LogicalAnd or NodeType.LogicalOr;
     }
 }

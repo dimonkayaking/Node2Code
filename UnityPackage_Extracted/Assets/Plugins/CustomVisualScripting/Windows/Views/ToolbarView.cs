@@ -5,9 +5,11 @@ namespace CustomVisualScripting.Windows.Views
 {
     public class ToolbarView : VisualElement
     {
+        public Button NewButton { get; private set; }
         public Button ParseButton { get; private set; }
         public Button GenerateButton { get; private set; }
         public Button SaveButton { get; private set; }
+        public Button SaveAsButton { get; private set; }
         public Button LoadButton { get; private set; }
         public Button ClearButton { get; private set; }
         
@@ -22,6 +24,10 @@ namespace CustomVisualScripting.Windows.Views
             style.paddingLeft = 10;
             style.paddingRight = 10;
             
+            NewButton = new Button { text = "Новый" };
+            NewButton.style.marginRight = 5;
+            Add(NewButton);
+
             ParseButton = new Button { text = "Парсить код" };
             ParseButton.style.marginRight = 5;
             Add(ParseButton);
@@ -33,6 +39,10 @@ namespace CustomVisualScripting.Windows.Views
             SaveButton = new Button { text = "Сохранить" };
             SaveButton.style.marginRight = 5;
             Add(SaveButton);
+
+            SaveAsButton = new Button { text = "Сохранить как" };
+            SaveAsButton.style.marginRight = 5;
+            Add(SaveAsButton);
             
             LoadButton = new Button { text = "Загрузить" };
             LoadButton.style.marginRight = 5;

@@ -148,8 +148,32 @@ namespace VisualScripting.Core.Parsers
 
                 if (v.Initializer == null)
                 {
-                    _errors.Add(
-                        $"Объявление без инициализатора не поддерживается ({FormatUserLocation(local.SyntaxTree, v.Span)}).");
+                    var typeStr = local.Declaration.Type.ToString().Trim();
+                    var vType = typeStr switch
+                    {
+                        "float" => "float",
+                        "bool" => "bool",
+                        "string" => "string",
+                        _ => "int"
+                    };
+
+                    var declId = NewId();
+                    _graph.Nodes.Add(new NodeData
+                    {
+                        Id = declId,
+                        Type = NodeType.VariableDeclaration,
+                        Value = "",
+                        ValueType = vType,
+                        VariableName = name
+                    });
+                    _symbolToNodeId[name] = declId;
+
+                    var declHost = new FlowHost { NodeId = declId };
+                    if (last != null)
+                        AddEdge(last.NodeId, last.ExecOutPort, declHost.NodeId, "execIn");
+                    else if (prevNode != null)
+                        AddEdge(prevNode, prevPort, declHost.NodeId, "execIn");
+                    last = declHost;
                     continue;
                 }
 
@@ -191,18 +215,32 @@ namespace VisualScripting.Core.Parsers
 
             var idLeft = (IdentifierNameSyntax)assign.Left;
             var name = idLeft.Identifier.Text;
-            var rootId = VisitExpression(assign.Right, true, name, out var unsupported);
+            var rootId = VisitExpression(assign.Right, false, null, out var unsupported);
             if (unsupported || rootId == null)
                 return null;
 
-            _symbolToNodeId[name] = rootId;
+            var setId = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = setId,
+                Type = NodeType.VariableSet,
+                Value = "",
+                ValueType = "",
+                VariableName = name
+            });
+            AddEdge(rootId, GetDataOutPortForNodeId(rootId), setId, "value");
 
-            var host = new FlowHost { NodeId = rootId };
+            _symbolToNodeId[name] = setId;
+
+            var host = new FlowHost { NodeId = setId };
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, host.NodeId, "execIn");
             return host;
         }
 
+        /// <summary>
+        /// Рекурсивная цепочка if / else if / else.
+        /// </summary>
         private void VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
         {
             var ifNodeId = NewId();

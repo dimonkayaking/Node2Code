@@ -24,6 +24,8 @@ namespace CustomVisualScripting.Editor.Windows
         private CustomToolbar _toolbar;
         private ErrorPanel _errorPanel;
         
+        private string _currentFilePath;
+        
         [MenuItem("Tools/Visual Scripting")]
         public static void OpenWindow()
         {
@@ -66,9 +68,11 @@ namespace CustomVisualScripting.Editor.Windows
             var root = rootVisualElement;
             
             _toolbar = new CustomToolbar();
+            _toolbar.NewButton.clicked += OnNew;
             _toolbar.ParseButton.clicked += OnParse;
             _toolbar.GenerateButton.clicked += OnGenerate;
             _toolbar.SaveButton.clicked += OnSave;
+            _toolbar.SaveAsButton.clicked += OnSaveAs;
             _toolbar.LoadButton.clicked += OnLoad;
             _toolbar.ClearButton.clicked += OnClear;
             root.Add(_toolbar);
@@ -134,11 +138,59 @@ namespace CustomVisualScripting.Editor.Windows
             _toolbar.SetStatusSuccess("Код сгенерирован");
         }
         
+        private void OnNew()
+        {
+            string path = EditorUtility.SaveFilePanel("Новый граф — выберите имя файла", Application.dataPath, "new_graph.json", "json");
+            if (string.IsNullOrEmpty(path)) return;
+
+            _codeEditor.Clear();
+            _currentGraph = new CompleteGraphData();
+            _errorPanel.Clear();
+            _currentFilePath = path;
+
+            if (GraphSaver.SaveToJson(_currentGraph, path))
+            {
+                UpdateGraphView();
+                _toolbar.SetStatusSuccess($"Создан: {Path.GetFileName(path)}");
+            }
+            else
+            {
+                _toolbar.SetStatusError("Ошибка создания файла");
+            }
+        }
+
         private void OnSave()
         {
-            string path = EditorUtility.SaveFilePanel("Сохранить граф", Application.dataPath, "graph.json", "json");
+            if (string.IsNullOrEmpty(_currentFilePath))
+            {
+                OnSaveAs();
+                return;
+            }
+
+            SaveVisualNodePositions();
+
+            if (GraphSaver.SaveToJson(_currentGraph, _currentFilePath))
+            {
+                _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(_currentFilePath)}");
+            }
+            else
+            {
+                _toolbar.SetStatusError("Ошибка сохранения");
+            }
+        }
+
+        private void OnSaveAs()
+        {
+            string defaultName = !string.IsNullOrEmpty(_currentFilePath)
+                ? Path.GetFileName(_currentFilePath)
+                : "graph.json";
+
+            string path = EditorUtility.SaveFilePanel("Сохранить граф как", Application.dataPath, defaultName, "json");
             if (string.IsNullOrEmpty(path)) return;
-            
+
+            SaveVisualNodePositions();
+            _currentFilePath = path;
+
             if (GraphSaver.SaveToJson(_currentGraph, path))
             {
                 _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(path)}");
@@ -158,6 +210,7 @@ namespace CustomVisualScripting.Editor.Windows
             if (loaded != null)
             {
                 _currentGraph = loaded;
+                _currentFilePath = path;
                 _codeEditor.Code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
                 UpdateGraphView();
                 _toolbar.SetStatusSuccess($"Загружено: {Path.GetFileName(path)}");
@@ -176,6 +229,22 @@ namespace CustomVisualScripting.Editor.Windows
             UpdateGraphView();
             _toolbar.SetStatusNormal("Очищено");
         }
+
+        private void SaveVisualNodePositions()
+        {
+            if (_currentGraph?.VisualNodes == null || _graphView == null)
+                return;
+
+            foreach (var vnd in _currentGraph.VisualNodes)
+            {
+                var nodeView = _graphView.nodeViews?.FirstOrDefault(
+                    nv => (nv.nodeTarget as dynamic)?.NodeId == vnd.NodeId);
+                if (nodeView != null)
+                {
+                    vnd.Position = nodeView.GetPosition().position;
+                }
+            }
+        }
         
         private void UpdateGraphView()
         {
@@ -191,14 +260,21 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphContainer.Add(placeholder);
                 return;
             }
-            
-            // Текстовое отображение графа
+
+            var posDict = new System.Collections.Generic.Dictionary<string, Vector2>();
+            if (_currentGraph.VisualNodes != null)
+            {
+                foreach (var vn in _currentGraph.VisualNodes)
+                    posDict[vn.NodeId] = vn.Position;
+            }
+
             var info = new VisualElement();
             info.style.marginTop = 10;
             info.style.marginLeft = 10;
             info.style.flexGrow = 1;
-            
-            var label = new Label($"Граф содержит {_currentGraph.LogicGraph.Nodes.Count} нод");
+
+            int edgeCount = _currentGraph.LogicGraph.Edges?.Count ?? 0;
+            var label = new Label($"Граф: {_currentGraph.LogicGraph.Nodes.Count} нод, {edgeCount} связей");
             label.style.color = Color.white;
             label.style.fontSize = 14;
             label.style.marginBottom = 10;
@@ -207,7 +283,12 @@ namespace CustomVisualScripting.Editor.Windows
             foreach (var node in _currentGraph.LogicGraph.Nodes)
             {
                 var color = GraphConverter.GetNodeColor(node.Type);
-                var nodeLabel = new Label($"  • {GraphConverter.GetNodeDisplayName(node.Type)} (ID: {node.Id})");
+                var displayName = GraphConverter.GetNodeDisplayName(node.Type);
+                var varPart = string.IsNullOrEmpty(node.VariableName) ? "" : $" [{node.VariableName}]";
+                var valPart = string.IsNullOrEmpty(node.Value) ? "" : $" = {node.Value}";
+
+                var text = $"  {node.Id}: {displayName}{varPart}{valPart}";
+                var nodeLabel = new Label(text);
                 nodeLabel.style.color = color;
                 nodeLabel.style.marginLeft = 20;
                 nodeLabel.style.marginBottom = 2;
