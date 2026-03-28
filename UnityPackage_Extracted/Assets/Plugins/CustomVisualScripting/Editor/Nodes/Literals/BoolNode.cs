@@ -10,16 +10,16 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
     {
         public override NodeType NodeType => NodeType.LiteralBool;
 
-        [Output("Value")]
-        public bool value;
+        [Output("output")]
+        public bool output;
 
         public bool boolValue = true;
 
-        public override string name => $"Bool: {boolValue}";
-        
+        public override string name => string.IsNullOrEmpty(variableName) ? $"Bool: {boolValue}" : $"{variableName} = {boolValue}";
+
         protected override void Process()
         {
-            value = boolValue;
+            output = boolValue;
         }
 
         public override void InitializeFromData(NodeData data)

@@ -10,22 +10,22 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
     {
         public override NodeType NodeType => NodeType.LiteralString;
 
-        [Output("Value")]
-        public string value;
+        [Output("output")]
+        public string output;
 
         public string stringValue = "";
 
-        public override string name => $"String: {stringValue}";
-        
+        public override string name => string.IsNullOrEmpty(variableName) ? $"String: {stringValue}" : $"{variableName}";
+
         protected override void Process()
         {
-            value = stringValue;
+            output = stringValue;
         }
 
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            stringValue = data.Value;
+            stringValue = data.Value ?? "";
         }
 
         public override NodeData ToNodeData()

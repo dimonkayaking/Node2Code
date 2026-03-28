@@ -1,66 +1,42 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using VisualScripting.Core.Models;
 
 namespace CustomVisualScripting.Runtime.Execution
 {
     public class NodeExecutor
     {
-        private Dictionary<string, object> _variables = new Dictionary<string, object>();
-        
-        public object ExecuteNode(NodeData node, Dictionary<string, object> context)
+        private readonly Dictionary<string, object> _variables = new Dictionary<string, object>();
+
+        public object ExecuteNode(NodeData node, Dictionary<string, object> context, GraphData graph = null)
         {
             if (node == null) return null;
-            
+
             try
             {
-                switch ((int)node.Type)
+                return node.Type switch
                 {
-                    case 1: // LiteralInt
-                        return int.Parse(node.Value);
-                        
-                    case 2: // LiteralFloat
-                        return float.Parse(node.Value);
-                        
-                    case 3: // LiteralBool
-                        return bool.Parse(node.Value);
-                        
-                    case 4: // LiteralString
-                        return node.Value;
-                        
-                    case 10: // MathAdd
-                        var left = GetInputValue(node, "left", context);
-                        var right = GetInputValue(node, "right", context);
-                        if (left is int l && right is int r) return l + r;
-                        if (left is float lf && right is float rf) return lf + rf;
-                        return 0;
-                        
-                    case 11: // MathSubtract
-                        left = GetInputValue(node, "left", context);
-                        right = GetInputValue(node, "right", context);
-                        if (left is int l2 && right is int r2) return l2 - r2;
-                        if (left is float lf2 && right is float rf2) return lf2 - rf2;
-                        return 0;
-                        
-                    case 12: // MathMultiply
-                        left = GetInputValue(node, "left", context);
-                        right = GetInputValue(node, "right", context);
-                        if (left is int l3 && right is int r3) return l3 * r3;
-                        if (left is float lf3 && right is float rf3) return lf3 * rf3;
-                        return 0;
-                        
-                    case 13: // MathDivide
-                        left = GetInputValue(node, "left", context);
-                        right = GetInputValue(node, "right", context);
-                        if (right is int r4 && r4 == 0) return 0;
-                        if (right is float rf4 && rf4 == 0) return 0;
-                        if (left is int l4 && right is int r4_2) return l4 / r4_2;
-                        if (left is float lf4 && right is float rf4_2) return lf4 / rf4_2;
-                        return 0;
-                        
-                    default:
-                        return null;
-                }
+                    NodeType.LiteralInt => int.Parse(node.Value),
+                    NodeType.LiteralFloat => float.Parse(node.Value),
+                    NodeType.LiteralBool => bool.Parse(node.Value),
+                    NodeType.LiteralString => node.Value,
+                    NodeType.MathAdd => MathBin(node, graph, context, (a, b) => Add(a, b)),
+                    NodeType.MathSubtract => MathBin(node, graph, context, (a, b) => Sub(a, b)),
+                    NodeType.MathMultiply => MathBin(node, graph, context, (a, b) => Mul(a, b)),
+                    NodeType.MathDivide => MathBin(node, graph, context, (a, b) => Div(a, b)),
+                    NodeType.MathModulo => MathBin(node, graph, context, (a, b) => Mod(a, b)),
+                    NodeType.CompareEqual => CmpBin(node, graph, context, (a, b) => Equals(a, b)),
+                    NodeType.CompareNotEqual => CmpBin(node, graph, context, (a, b) => !Equals(a, b)),
+                    NodeType.CompareGreater => CmpNum(node, graph, context, (a, b) => ToDouble(a) > ToDouble(b)),
+                    NodeType.CompareLess => CmpNum(node, graph, context, (a, b) => ToDouble(a) < ToDouble(b)),
+                    NodeType.CompareGreaterOrEqual => CmpNum(node, graph, context, (a, b) => ToDouble(a) >= ToDouble(b)),
+                    NodeType.CompareLessOrEqual => CmpNum(node, graph, context, (a, b) => ToDouble(a) <= ToDouble(b)),
+                    NodeType.LogicalAnd => LogicBin(node, graph, context, (a, b) => ToBool(a) && ToBool(b)),
+                    NodeType.LogicalOr => LogicBin(node, graph, context, (a, b) => ToBool(a) || ToBool(b)),
+                    NodeType.LogicalNot => !ToBool(GetPort(node, graph, context, "input")),
+                    _ => null
+                };
             }
             catch (Exception ex)
             {
@@ -68,28 +44,118 @@ namespace CustomVisualScripting.Runtime.Execution
                 return null;
             }
         }
-        
-        private object GetInputValue(NodeData node, string portName, Dictionary<string, object> context)
+
+        private static object MathBin(NodeData node, GraphData graph, Dictionary<string, object> ctx, Func<object, object, object> op)
         {
-            if (node.InputConnections != null && node.InputConnections.ContainsKey(portName))
-            {
-                var sourceNodeId = node.InputConnections[portName];
-                if (context.ContainsKey(sourceNodeId))
-                {
-                    return context[sourceNodeId];
-                }
-            }
-            return null;
+            var a = GetPort(node, graph, ctx, "inputA");
+            var b = GetPort(node, graph, ctx, "inputB");
+            return op(a, b);
         }
-        
+
+        private static object CmpBin(NodeData node, GraphData graph, Dictionary<string, object> ctx, Func<object, object, bool> op)
+        {
+            var a = GetPort(node, graph, ctx, "left");
+            var b = GetPort(node, graph, ctx, "right");
+            return op(a, b);
+        }
+
+        private static object CmpNum(NodeData node, GraphData graph, Dictionary<string, object> ctx, Func<object, object, bool> op)
+        {
+            var a = GetPort(node, graph, ctx, "left");
+            var b = GetPort(node, graph, ctx, "right");
+            return op(a, b);
+        }
+
+        private static object LogicBin(NodeData node, GraphData graph, Dictionary<string, object> ctx, Func<object, object, bool> op)
+        {
+            var a = GetPort(node, graph, ctx, "left");
+            var b = GetPort(node, graph, ctx, "right");
+            return op(a, b);
+        }
+
+        private static object Add(object left, object right)
+        {
+            if (left is int l && right is int r) return l + r;
+            if (left is float lf && right is float rf) return lf + rf;
+            if (left is int li && right is float rf2) return li + rf2;
+            if (left is float lf2 && right is int ri) return lf2 + ri;
+            return 0;
+        }
+
+        private static object Sub(object left, object right)
+        {
+            if (left is int l && right is int r) return l - r;
+            if (left is float lf && right is float rf) return lf - rf;
+            if (left is int li && right is float rf2) return li - rf2;
+            if (left is float lf2 && right is int ri) return lf2 - ri;
+            return 0;
+        }
+
+        private static object Mul(object left, object right)
+        {
+            if (left is int l && right is int r) return l * r;
+            if (left is float lf && right is float rf) return lf * rf;
+            if (left is int li && right is float rf2) return li * rf2;
+            if (left is float lf2 && right is int ri) return lf2 * ri;
+            return 0;
+        }
+
+        private static object Div(object left, object right)
+        {
+            if (ToDouble(right) == 0) return 0;
+            if (left is int l && right is int r) return l / r;
+            if (left is float lf && right is float rf) return lf / rf;
+            return Convert.ToSingle(ToDouble(left) / ToDouble(right));
+        }
+
+        private static object Mod(object left, object right)
+        {
+            if (ToDouble(right) == 0) return 0;
+            if (left is int l && right is int r) return l % r;
+            return Convert.ToSingle(ToDouble(left) % ToDouble(right));
+        }
+
+        private static double ToDouble(object v) => v switch
+        {
+            int i => i,
+            float f => f,
+            double d => d,
+            _ => 0
+        };
+
+        private static bool ToBool(object v) => v switch
+        {
+            bool b => b,
+            int i => i != 0,
+            _ => false
+        };
+
+        private static object GetPort(NodeData node, GraphData graph, Dictionary<string, object> context, string portName)
+        {
+            if (node.InputConnections != null && node.InputConnections.TryGetValue(portName, out var legacyId))
+            {
+                if (context != null && context.TryGetValue(legacyId, out var v))
+                    return v;
+            }
+
+            if (graph?.Edges == null || context == null)
+                return null;
+
+            var edge = graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == portName);
+            if (edge == null)
+                return null;
+
+            return context.TryGetValue(edge.FromNodeId, out var val) ? val : null;
+        }
+
         public void SetVariable(string name, object value)
         {
             _variables[name] = value;
         }
-        
+
         public object GetVariable(string name)
         {
-            return _variables.ContainsKey(name) ? _variables[name] : null;
+            return _variables.TryGetValue(name, out var v) ? v : null;
         }
     }
 }

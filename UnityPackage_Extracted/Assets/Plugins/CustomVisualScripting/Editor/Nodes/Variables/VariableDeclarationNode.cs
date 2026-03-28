@@ -11,7 +11,7 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override NodeType NodeType => NodeType.VariableDeclaration;
 
         [Input("Variable Name")]
-        public string variableName;
+        public string nameInput;
 
         [Input("Value")]
         public object value;
@@ -23,10 +23,10 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public string variableType = "object";
 
         public override string name => $"Declare: {variableNameValue} : {variableType}";
-        
+
         protected override void Process()
         {
-            variableName = variableNameValue;
+            nameInput = variableNameValue;
             output = value;
         }
 
@@ -39,6 +39,7 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
 
         public override NodeData ToNodeData()
         {
+            variableName = variableNameValue;
             var data = base.ToNodeData();
             data.Value = variableNameValue;
             data.ValueType = variableType;

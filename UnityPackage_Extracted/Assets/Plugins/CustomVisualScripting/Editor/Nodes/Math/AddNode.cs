@@ -10,20 +10,20 @@ namespace CustomVisualScripting.Editor.Nodes.Math
     {
         public override NodeType NodeType => NodeType.MathAdd;
 
-        [Input("A")]
-        public float a;
+        [Input("inputA")]
+        public float inputA;
 
-        [Input("B")]
-        public float b;
+        [Input("inputB")]
+        public float inputB;
 
-        [Output("Result")]
-        public float result;
+        [Output("output")]
+        public float output;
 
         public override string name => "Add (+)";
         
         protected override void Process()
         {
-            result = a + b;
+            output = inputA + inputB;
         }
     }
 }

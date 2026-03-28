@@ -1,190 +1,163 @@
-# Обращение к команде: Модуль Парсера / Транслятора (MVP)
+# Обращение к команде: парсер, граф и плагин (MVP)
 
-Привет, команда! 👋
+Привет, команда!
 
-Парсер и кодогенератор **полностью готовы** для стыковки с визуальной системой нод и UI редактора.  
-Ниже — полный список реализованных фич, зафиксированный скоуп MVP и конкретные инструкции для каждого члена команды.
-
----
-
-## 📋 Зафиксированный скоуп MVP (19 типов нод)
-
-Это **финальный** список нод, который мы реализуем для презентации. Всё, что не в этом списке — **не входит в MVP**.
-
-### Литералы (4 ноды)
-
-| NodeType         | Пример в коде   | Порты           |
-| ---------------- | --------------- | --------------- |
-| `VariableInt`    | `5`             | Выход: значение |
-| `VariableFloat`  | `5.0f`, `1.5`   | Выход: значение |
-| `VariableString` | `"hello"`       | Выход: значение |
-| `VariableBool`   | `true`, `false` | Выход: значение |
-
-### Переменные (3 ноды)
-
-| NodeType              | Пример в коде  | Порты                               |
-| --------------------- | -------------- | ----------------------------------- |
-| `VariableDeclaration` | `int a = 5;`   | Вход данных: `value`, Поток: `next` |
-| `VariableRead`        | `...a + 10...` | Выход: значение переменной          |
-| `VariableAssignment`  | `a = 20;`      | Вход данных: `value`, Поток: `next` |
-
-### Математика (4 ноды)
-
-| NodeType       | Пример в коде | Порты                                    |
-| -------------- | ------------- | ---------------------------------------- |
-| `MathAdd`      | `a + b`       | Входы: `left`, `right`, Выход: результат |
-| `MathSubtract` | `a - b`       | Входы: `left`, `right`, Выход: результат |
-| `MathMultiply` | `a * b`       | Входы: `left`, `right`, Выход: результат |
-| `MathDivide`   | `a / b`       | Входы: `left`, `right`, Выход: результат |
-
-### Сравнение (3 ноды) — НОВОЕ
-
-| NodeType         | Пример в коде | Порты                               |
-| ---------------- | ------------- | ----------------------------------- |
-| `CompareGreater` | `a > b`       | Входы: `left`, `right`, Выход: bool |
-| `CompareLess`    | `a < b`       | Входы: `left`, `right`, Выход: bool |
-| `CompareEqual`   | `a == b`      | Входы: `left`, `right`, Выход: bool |
-
-### Управление потоком (1 нода)
-
-| NodeType      | Пример в коде           | Порты                                                    |
-| ------------- | ----------------------- | -------------------------------------------------------- |
-| `IfStatement` | `if (...) { } else { }` | Вход данных: `condition`, Поток: `true`, `false`, `next` |
-
-### Unity-специфичные (3 ноды)
-
-| NodeType                | Пример в коде              | Порты                                |
-| ----------------------- | -------------------------- | ------------------------------------ |
-| `Vector3Create`         | `new Vector3(x, y, z)`     | Входы: `x`, `y`, `z`, Выход: Vector3 |
-| `TransformPositionRead` | `transform.position`       | Выход: Vector3                       |
-| `TransformPositionSet`  | `transform.position = ...` | Вход данных: `value`, Поток: `next`  |
-
-### Вывод (1 нода)
-
-| NodeType   | Пример в коде    | Порты                                 |
-| ---------- | ---------------- | ------------------------------------- |
-| `DebugLog` | `Debug.Log(...)` | Вход данных: `message`, Поток: `next` |
+Ниже — **актуальное состояние** после перехода парсера на **Roslyn** и согласования контракта графа с тимлидом (строго C#, без циклов и степени на этом этапе). Старые формулировки про «19 нод с VariableInt / Debug.Log» и 12 тестов **заменены** этим текстом.
 
 ---
 
-## 🎯 Целевой демо-скрипт для защиты
+## Обновление от 28.03.2026 — что сделано (Backend 1 + интеграция)
 
-Этот скрипт проходит полный цикл парсинга и генерации (покрыт тестом `TestFullDemoScript`):
+| Область | Изменение |
+|--------|-----------|
+| **Парсер** | `RoslynCodeParser` переписан на **Microsoft.CodeAnalysis** (обход AST, без Regex и без Shunting Yard). |
+| **Модель** | В `NodeData` добавлено поле **`VariableName`**. Парсер **не заполняет** `ExecutionFlow` / `InputConnections` — только **`Edges`** с именами портов по контракту. |
+| **`NodeType`** | Добавлены: `MathModulo`, `CompareNotEqual`, `CompareGreaterOrEqual`, `CompareLessOrEqual`, `LogicalAnd`, `LogicalOr`, `LogicalNot`, `FlowElse`. Enum в Core и в `UnityPackage_Extracted` **синхронизирован**. |
+| **Рёбра** | Единая схема портов: математика `inputA` / `inputB` / `output`; сравнения и логика (`&&`, ИЛИ, `!`) — `left` / `right` / `result` или `input` / `result` для `!`; `If` — `condition`, поток `true` / `false`; выполнение — `execIn` / `execOut`. |
+| **Присваивание** | Результат — **один узел операции** с `VariableName` (без отдельного узла объявления для `z` в `int z = x + y`). Ссылки на переменные — **прямые рёбра** к узлу-источнику, **без VariableGet**. |
+| **if / else if / else** | Цепочка **`FlowIf`** по ветке `false`, финальный **`FlowElse`**; тела — рёбра потока между инструкциями. |
+| **Editor-ноды** | `CustomBaseNode` наследует **`BaseExecutionNode`** (есть `execIn` / `execOut`). Обновлены порты у математики и литералов. Добавлены **7 новых нод** + **`ElseNode`**. **`IfNode`** переведён на потоковую модель (`condition` + выходы `true` / `false`). |
+| **Интеграция** | `GraphConverter` / `GraphSerializer` — цвета и имена для новых типов. `ParserBridge` логирует число нод и рёбер после парса. |
+| **Генератор** | `SimpleCodeGenerator.GenerateCode` — **MVP-подмножество**: литералы с именем + бинарная математика по `Edges` (для простого roundtrip в тестах). |
+| **Тесты** | Удалён устаревший `ParserCodegenTests` (ожидал другой парсер и Unity-скрипты). Добавлен **`RoslynParserMvpTests`** (5 тестов), `dotnet test` зелёный. |
+| **Runtime** | `NodeExecutor` переведён на **`switch` по `NodeType`**, чтение входов из **`Edges`** (плюс legacy `InputConnections`). `GraphRunner` передаёт граф в executor. |
+
+**Файлы «источник правды» в репозитории:** `VisualScripting.Core/` (парсер, модели, генератор, тесты); зеркало под Unity — `UnityPackage_Extracted/Assets/Plugins/CustomVisualScripting/`.
+
+---
+
+## Контракт портов (кратко, для Backend 2 и Fullstack)
+
+| Тип узла | Входы | Выходы |
+|----------|--------|--------|
+| Литералы | — | `output` |
+| Math (Add, Subtract, Multiply, Divide, Modulo) | `inputA`, `inputB` | `output` |
+| Compare (Equal, Greater, Less, NotEqual, >=, <=) | `left`, `right` | `result` |
+| And / Or | `left`, `right` | `result` |
+| Not | `input` | `result` |
+| If | `execIn`, `condition` | `true`, `false`, `execOut` (база) |
+| Else | `execIn` | `execOut` |
+| Прочие (Unity, переменные) | см. существующие ноды | — |
+
+`VariableName`: непустой только у литерала с объявлением и у **корневого** узла результата присваивания; у промежуточных операций — пустая строка.
+
+---
+
+## Скоуп MVP парсера (что разбирается сейчас)
+
+**Поддерживается:**
+
+- Объявления `int x = …`, `float`, `string`, `bool` **с инициализатором**.
+- Простое присваивание `z = …` (правая часть — выражение MVP).
+- Арифметика: `+ - * / %`, скобки, приоритеты из Roslyn.
+- Сравнения: `== != > < >= <=`.
+- Логика: `&&`, `||`, `!`.
+- `if` / `else if` / `else` с блоками или одной инструкцией.
+- Вложенные `if`.
+
+**Пока не поддерживается парсером (ошибка или «неподдерживаемая конструкция»):**
+
+- Циклы, вызовы методов (`Debug.Log`, `Math.Pow`, …), Unity-специфика (`transform`, `Vector3`, …).
+- Объявление без инициализатора, составные присваивания (`+=`), и т.д.
+
+Оператор степени в стиле Python и циклы в ТЗ MVP v3 **не входят**.
+
+---
+
+## Что НЕ входит в текущий MVP парсера (напоминание)
+
+- Циклы (`for`, `while`)
+- Массивы, коллекции, методы, дженерики
+- `switch`, `return`, корутины, async
+- Генерация полного демо-скрипта с `transform` / `Debug.Log` из старого описания — до появления поддержки в парсере или отдельной задачи
+
+---
+
+## Пример кода для ручной проверки парсера в редакторе
 
 ```csharp
-float speed = 5;
-float offset = speed * 0.1;
-if (speed > 3)
+int x = 10;
+int y = 20;
+int z = x + y * 2 % 3;
+bool flag = true;
+if (x >= y && z != 0 || !flag)
 {
-    transform.position = new Vector3(offset, 0, 0);
-    UnityEngine.Debug.Log(speed);
+    z = x + y;
 }
 else
 {
-    UnityEngine.Debug.Log(0);
+    z = x - y;
 }
 ```
 
----
-
-## 🛑 Что НЕ входит в MVP (не реализуем)
-
-- ❌ Циклы (`for`, `while`, `foreach`)
-- ❌ Массивы и коллекции (`List<T>`, `int[]`)
-- ❌ Пользовательские методы и классы
-- ❌ `GetComponent<T>()` и дженерики
-- ❌ `switch/case`, `return`
-- ❌ Логические операторы (`&&`, `||`, `!`)
-- ❌ Корутины, async/await
-- ❌ Обработка событий Unity (OnCollisionEnter и т.д.)
-- ❌ Оптимизация (кэширование, асинхронный парсинг)
+Ожидается: ноды литералов, `Multiply` → `Modulo` → `Add`, цепочка логики к `FlowIf`, ветка `FlowElse`, рёбра с портами из таблицы выше.
 
 ---
 
-## 🤝 Задачи для каждого члена команды
+## Задачи по ролям (обновлено)
 
-### 👨‍💻 Разработчику №1 (Система нод)
+### Backend 1 (парсер / мост) — статус
 
-Твоя задача — реализовать 19 визуальных нод в Unity `GraphView` и написать **`GraphSerializer`** — класс-конвертер между `GraphData` (модель парсера) и визуальным представлением (Unity GraphView).
+Основной объём по плану MVP v3 в репозитории **влит**. Дальше — доработки по согласованию (например, расширение генератора, новые конструкции).
 
-**Ключевые моменты:**
+### Backend 2 (генератор / рантайм)
 
-1. Все порты чётко описаны в таблице выше. У каждой ноды есть входы данных (`InputConnections`) и выходы потока выполнения (`ExecutionFlow`).
-2. Ноды делятся на два типа:
-   - **Ноды-выражения** (Литералы, VariableRead, Math, Compare, Vector3Create, TransformPositionRead) — у них нет потока выполнения, только данные.
-   - **Ноды-инструкции** (VariableDeclaration, VariableAssignment, DebugLog, IfStatement, TransformPositionSet) — у них есть поток выполнения (белые провода `next`, `true`, `false`).
-3. Начни с `GraphSerializer.cs` — напиши метод `GraphDataToVisual(GraphData graph)`, который создаёт ноды и провода на экране. Затем `VisualToGraphData()` — обратную конвертацию.
+- Ориентироваться на **`Edges`** и **`VariableName`**, а не на `ExecutionFlow` от парсера.
+- Расширять `SimpleCodeGenerator` под `if`, сравнения и логику по мере необходимости; согласовать порядок эмиссии инструкций с топологией графа.
 
-### 👨‍💼 Тимлиду / Архитектору интерфейсов
+### Fullstack / визуальный граф (GraphProcessor)
 
-Вызов парсера и генератора:
+- Подключить отображение новых типов нод и проводов с **именами портов из контракта**.
+- Доработать **`GraphSerializer`**: сериализация/десериализация **`Edges`** (сейчас в коде помечено TODO).
+
+### Тимлид / сценарий демо
+
+- Для записи демо использовать **фрагменты из раздела «Пример кода»** или согласовать новый целевой скрипт после расширения парсера под Unity.
+
+---
+
+## Вызов API (без изменений по смыслу)
 
 ```csharp
-// Код → Ноды
-var parser = new RoslynCodeParser();
-ParseResult result = parser.Parse(codeText);
+// Код → граф
+var result = ParserBridge.Parse(codeText);
 if (result.HasErrors) {
-    foreach(var err in result.Errors)
-        Debug.LogError(err);   // Покажи ошибки красным
+    foreach (var err in result.Errors)
+        Debug.LogError(err);
 } else {
-    graphView.LoadFromGraphData(result.Graph);  // Код Разработчика №1
+    // загрузка result.Graph в UI / GraphView
 }
 
-// Ноды → Код
-GraphData graph = graphView.SaveToGraphData();  // Код Разработчика №1
+// Граф → код (MVP генератора — ограниченный подмножество)
 var generator = new SimpleCodeGenerator();
 string code = generator.GenerateCode(graph);
-codeEditor.SetText(code);
 ```
-
-### 📝 Аналитику / Тех. райтеру
-
-Используй **целевой демо-скрипт** выше как основу для сценария видеоурока. Покажи:
-
-1. Пользователь пишет код в текстовом поле
-2. Нажимает тумблер → появляются ноды
-3. Меняет значение `speed` в ноде
-4. Нажимает обратно → код обновился
-5. Кубик на сцене движется
 
 ---
 
-## 📊 Текущее покрытие тестами (12 тестов)
+## Тесты (актуально)
 
-| Тест                                        | Что проверяет                                           |
-| ------------------------------------------- | ------------------------------------------------------- |
-| `TestParseAndGenerate`                      | Базовый цикл: `Debug.Log(1 + 2)` → граф → код           |
-| `TestVariableDeclarationAndAssignment`      | Переменные + Execution Flow                             |
-| `TestVariableDeclarationWithoutInitializer` | `int b;` без значения                                   |
-| `TestUnityTransformAndVector3`              | `transform.position = new Vector3(...)`                 |
-| `TestIfStatement`                           | Базовый if/else                                         |
-| `TestIfWithMultipleStatements`              | If-блок с несколькими инструкциями                      |
-| `TestDoubleLiteral`                         | Литерал `1.5` без суффикса `f`                          |
-| `TestCyclicGraphDoesNotCrash`               | Защита от циклических графов                            |
-| `TestSyntaxError`                           | Некорректный код → `HasErrors = true`                   |
-| `TestComparisonOperators`                   | `if (speed > 3)` с оператором `>`                       |
-| `TestLessThanAndEqual`                      | Оператор `<`                                            |
-| `TestFullDemoScript`                        | **Полный демо-скрипт для защиты** (интеграционный тест) |
+| Файл / класс | Количество | Назначение |
+|----------------|------------|------------|
+| `RoslynParserMvpTests.cs` | 5 | Арифметика с `%`, if + логика, вложенный if, синтаксическая ошибка, roundtrip `int x,y,z` через генератор. |
 
-Все **12 тестов проходят**, сборка без ошибок и предупреждений.
+Запуск: из корня репозитория `dotnet test VisualScripting.Tests/VisualScripting.Tests.csproj`.
 
 ---
 
-## 📁 Предлагаемая структура плагина в Unity
+## Структура в репозитории
 
 ```
-Assets/Plugins/CustomVisualScripting/
-├── Core/                          ← Разработчик №2 (Парсер) — DLL файлы
-│   ├── VisualScripting.Core.dll
-│   └── Microsoft.CodeAnalysis.*.dll
-├── Editor/                        ← Тимлид + Разработчик №1
-│   ├── Windows/                       Главное окно EditorWindow, тумблер, панель ошибок
-│   ├── Graph/                         GraphView, визуальные ноды, провода, GraphSerializer
-│   └── Styles/                        USS-стили
-├── Runtime/                       ← Тимлид + Разработчик №1
-│   ├── VisualScript.cs                MonoBehaviour на GameObject
-│   └── GraphAsset.cs                  ScriptableObject для хранения графа
-└── Documentation/                 ← Техрайтер
+VisualScripting.Core/           ← парсер, модели, SimpleCodeGenerator, тесты (ссылка из .Tests)
+UnityPackage_Extracted/Assets/Plugins/CustomVisualScripting/
+├── Core/                      ← зеркало моделей и RoslynCodeParser (исходники; в Unity нужны ещё DLL Roslyn)
+├── Editor/Nodes/              ← визуальные ноды (GraphProcessor)
+├── Integration/               ← ParserBridge, GraphConverter
+└── Runtime/Execution/         ← NodeExecutor, GraphRunner
 ```
 
-**Опасная точка для merge-конфликтов**: файл `Models/GraphData.cs`. Изменения в нём только по согласованию!
+**Точка внимания при merge:** `NodeType.cs`, `NodeData.cs`, `GraphData.cs`, `RoslynCodeParser.cs` — правки только по согласованному контракту.
+
+---
+
+Если нужна короткая выжимка для чата команды — можно переслать только раздел **«Обновление от 28.03.2026»** и таблицу **«Контракт портов»**.

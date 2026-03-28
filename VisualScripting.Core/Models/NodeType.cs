@@ -45,6 +45,16 @@ namespace VisualScripting.Core.Models
         IfStatement,
         TransformPositionRead,
         TransformPositionSet,
-        Vector3Create
+        Vector3Create,
+
+        // MVP v3 — расширение парсера
+        MathModulo,
+        CompareNotEqual,
+        CompareGreaterOrEqual,
+        CompareLessOrEqual,
+        LogicalAnd,
+        LogicalOr,
+        LogicalNot,
+        FlowElse
     }
 }

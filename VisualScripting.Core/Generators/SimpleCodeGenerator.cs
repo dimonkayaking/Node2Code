@@ -1,93 +1,110 @@
-using VisualScripting.Core.Models;
-using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using VisualScripting.Core.Models;
 
 namespace VisualScripting.Core.Generators
 {
     public class SimpleCodeGenerator
     {
-        public string Generate(GraphData graph)
+        public string GenerateCode(GraphData graph) => GenerateMvp(graph);
+
+        public string Generate(GraphData graph) => GenerateMvp(graph);
+
+        private static string GenerateMvp(GraphData graph)
         {
             if (graph == null || graph.Nodes.Count == 0)
-            {
                 return "// Нет узлов для генерации";
-            }
-            
+
+            var map = graph.Nodes.ToDictionary(n => n.Id);
             var sb = new StringBuilder();
-            sb.AppendLine("// Generated code from Visual Scripting");
-            sb.AppendLine("public class GeneratedClass");
-            sb.AppendLine("{");
-            sb.AppendLine("    public void Execute()");
-            sb.AppendLine("    {");
-            
-            var nodeVariables = new Dictionary<string, string>();
-            int tempCounter = 0;
-            
-            var literals = graph.Nodes.Where(n => (int)n.Type >= 1 && (int)n.Type <= 4);
-            foreach (var node in literals)
+
+            foreach (var node in graph.Nodes)
             {
-                string varName = $"var_{tempCounter++}";
-                nodeVariables[node.Id] = varName;
-                
-                switch ((int)node.Type)
+                if (IsLiteral(node.Type) && !string.IsNullOrEmpty(node.VariableName))
                 {
-                    case 1:
-                        sb.AppendLine($"        int {varName} = {node.Value};");
-                        break;
-                    case 2:
-                        sb.AppendLine($"        float {varName} = {node.Value}f;");
-                        break;
-                    case 3:
-                        sb.AppendLine($"        bool {varName} = {node.Value.ToLower()};");
-                        break;
-                    case 4:
-                        sb.AppendLine($"        string {varName} = \"{node.Value}\";");
-                        break;
+                    sb.AppendLine($"{KeywordFor(node.ValueType)} {node.VariableName} = {LiteralRhs(node)};");
+                    continue;
+                }
+
+                if (IsMath(node.Type) && !string.IsNullOrEmpty(node.VariableName))
+                {
+                    sb.AppendLine(
+                        $"{KeywordFor(InferResultType(graph, map, node))} {node.VariableName} = {EmitMathExpr(graph, map, node)};");
                 }
             }
-            
-            int resultCounter = 0;
-            var operations = graph.Nodes.Where(n => (int)n.Type >= 10 && (int)n.Type <= 13);
-            
-            foreach (var node in operations)
-            {
-                var inputNodes = graph.Edges
-                    .Where(e => e.ToNodeId == node.Id)
-                    .Select(e => e.FromNodeId)
-                    .ToList();
-                
-                if (inputNodes.Count >= 2 && 
-                    nodeVariables.ContainsKey(inputNodes[0]) && 
-                    nodeVariables.ContainsKey(inputNodes[1]))
-                {
-                    string leftVar = nodeVariables[inputNodes[0]];
-                    string rightVar = nodeVariables[inputNodes[1]];
-                    string resultVar = $"result_{resultCounter++}";
-                    nodeVariables[node.Id] = resultVar;
-                    
-                    switch ((int)node.Type)
-                    {
-                        case 10:
-                            sb.AppendLine($"        int {resultVar} = {leftVar} + {rightVar};");
-                            break;
-                        case 11:
-                            sb.AppendLine($"        int {resultVar} = {leftVar} - {rightVar};");
-                            break;
-                        case 12:
-                            sb.AppendLine($"        int {resultVar} = {leftVar} * {rightVar};");
-                            break;
-                        case 13:
-                            sb.AppendLine($"        int {resultVar} = {leftVar} / {rightVar};");
-                            break;
-                    }
-                }
-            }
-            
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-            
-            return sb.ToString();
+
+            return sb.ToString().TrimEnd();
         }
+
+        private static string InferResultType(GraphData graph, Dictionary<string, NodeData> map, NodeData node)
+        {
+            var leftE = graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputA");
+            if (leftE == null)
+                return "int";
+            var ln = map[leftE.FromNodeId];
+            if (ln.Type == NodeType.LiteralFloat || ln.ValueType == "float")
+                return "float";
+            if (IsMath(ln.Type) && InferResultType(graph, map, ln) == "float")
+                return "float";
+            return "int";
+        }
+
+        private static string LiteralRhs(NodeData n) =>
+            n.ValueType switch
+            {
+                "string" => $"\"{n.Value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"",
+                "float" => $"{n.Value}f",
+                "bool" => n.Value.ToLowerInvariant(),
+                _ => n.Value
+            };
+
+        private static string KeywordFor(string valueType) =>
+            valueType switch
+            {
+                "float" => "float",
+                "bool" => "bool",
+                "string" => "string",
+                _ => "int"
+            };
+
+        private static string EmitMathExpr(GraphData graph, Dictionary<string, NodeData> map, NodeData node)
+        {
+            var leftE = graph.Edges.First(e => e.ToNodeId == node.Id && e.ToPort == "inputA");
+            var rightE = graph.Edges.First(e => e.ToNodeId == node.Id && e.ToPort == "inputB");
+            var op = node.Type switch
+            {
+                NodeType.MathAdd => "+",
+                NodeType.MathSubtract => "-",
+                NodeType.MathMultiply => "*",
+                NodeType.MathDivide => "/",
+                NodeType.MathModulo => "%",
+                _ => "+"
+            };
+            return $"{EmitOperand(graph, map, leftE.FromNodeId)} {op} {EmitOperand(graph, map, rightE.FromNodeId)}";
+        }
+
+        private static string EmitOperand(GraphData graph, Dictionary<string, NodeData> map, string nodeId)
+        {
+            var n = map[nodeId];
+            if (IsLiteral(n.Type))
+            {
+                if (!string.IsNullOrEmpty(n.VariableName))
+                    return n.VariableName;
+                return LiteralRhs(n);
+            }
+
+            if (IsMath(n.Type))
+                return $"({EmitMathExpr(graph, map, n)})";
+
+            return n.VariableName;
+        }
+
+        private static bool IsLiteral(NodeType t) =>
+            t is NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString;
+
+        private static bool IsMath(NodeType t) =>
+            t is NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply or NodeType.MathDivide
+                or NodeType.MathModulo;
     }
 }

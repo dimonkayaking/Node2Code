@@ -73,13 +73,22 @@ namespace CustomVisualScripting.Integration
                 case NodeType.MathSubtract:
                 case NodeType.MathMultiply:
                 case NodeType.MathDivide:
+                case NodeType.MathModulo:
                     return new Color(0.2f, 0.8f, 0.4f);
                     
                 // Сравнения
                 case NodeType.CompareEqual:
                 case NodeType.CompareGreater:
                 case NodeType.CompareLess:
+                case NodeType.CompareNotEqual:
+                case NodeType.CompareGreaterOrEqual:
+                case NodeType.CompareLessOrEqual:
                     return new Color(1f, 0.6f, 0.1f);
+
+                case NodeType.LogicalAnd:
+                case NodeType.LogicalOr:
+                case NodeType.LogicalNot:
+                    return new Color(0.5f, 0.65f, 1f);
                     
                 // Переменные
                 case NodeType.VariableDeclaration:
@@ -89,6 +98,7 @@ namespace CustomVisualScripting.Integration
                     
                 // Flow
                 case NodeType.FlowIf:
+                case NodeType.FlowElse:
                     return new Color(0.9f, 0.2f, 0.2f);
                     
                 // Unity
@@ -121,11 +131,19 @@ namespace CustomVisualScripting.Integration
                 case NodeType.MathSubtract: return "Subtract";
                 case NodeType.MathMultiply: return "Multiply";
                 case NodeType.MathDivide: return "Divide";
+                case NodeType.MathModulo: return "Modulo";
                 
                 // Сравнения
                 case NodeType.CompareEqual: return "Equal";
                 case NodeType.CompareGreater: return "Greater";
                 case NodeType.CompareLess: return "Less";
+                case NodeType.CompareNotEqual: return "Not Equal";
+                case NodeType.CompareGreaterOrEqual: return "Greater Or Equal";
+                case NodeType.CompareLessOrEqual: return "Less Or Equal";
+
+                case NodeType.LogicalAnd: return "And";
+                case NodeType.LogicalOr: return "Or";
+                case NodeType.LogicalNot: return "Not";
                 
                 // Переменные
                 case NodeType.VariableDeclaration: return "Declare";
@@ -134,6 +152,7 @@ namespace CustomVisualScripting.Integration
                 
                 // Flow
                 case NodeType.FlowIf: return "If";
+                case NodeType.FlowElse: return "Else";
                 
                 // Unity
                 case NodeType.UnityVector3: return "Vector3";

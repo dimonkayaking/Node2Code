@@ -1,140 +1,490 @@
-﻿using VisualScripting.Core.Models;
+using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using VisualScripting.Core.Models;
 
 namespace VisualScripting.Core.Parsers
 {
     public class RoslynCodeParser
     {
         private int _nodeCounter;
-        private Dictionary<string, string> _variables = new Dictionary<string, string>();
-        
+        private GraphData _graph = null!;
+        private List<string> _errors = null!;
+        private readonly Dictionary<string, string> _symbolToNodeId = new Dictionary<string, string>();
+
         public ParseResult Parse(string code)
         {
             _nodeCounter = 0;
-            _variables.Clear();
-            var graph = new GraphData();
-            var errors = new List<string>();
-            
+            _graph = new GraphData();
+            _errors = new List<string>();
+            _symbolToNodeId.Clear();
+
             if (string.IsNullOrWhiteSpace(code))
             {
-                errors.Add("Код пуст");
-                return new ParseResult { Graph = graph, Errors = errors };
+                _errors.Add("Код пуст");
+                return Result();
             }
-            
-            try
+
+            var wrapped = $@"static class __VsParseWrapper
+{{
+    static void __VsParseMethod()
+    {{
+{code}
+    }}
+}}";
+
+            var tree = CSharpSyntaxTree.ParseText(
+                wrapped,
+                new CSharpParseOptions(LanguageVersion.Latest));
+
+            foreach (var d in tree.GetDiagnostics().Where(x => x.Severity == DiagnosticSeverity.Error))
             {
-                // Парсим объявления переменных
-                var declarationPattern = @"(\w+)\s+(\w+)\s*=\s*(\d+|""[^""]*""|true|false);";
-                var declarationMatches = Regex.Matches(code, declarationPattern);
-                
-                foreach (Match match in declarationMatches)
+                var pos = tree.GetLineSpan(d.Location.SourceSpan);
+                _errors.Add(
+                    $"{d.GetMessage()} ({pos.StartLinePosition.Line + 1}:{pos.StartLinePosition.Character + 1})");
+            }
+
+            if (_errors.Count > 0)
+                return Result();
+
+            var root = tree.GetCompilationUnitRoot();
+            var method = root.DescendantNodes()
+                .OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault(m => m.Identifier.Text == "__VsParseMethod");
+
+            if (method?.Body == null)
+            {
+                _errors.Add("Не удалось найти тело метода после разбора.");
+                return Result();
+            }
+
+            VisitMethodBody(method.Body);
+            return Result();
+        }
+
+        private ParseResult Result() =>
+            new ParseResult { Graph = _graph, Errors = _errors };
+
+        private void VisitMethodBody(BlockSyntax body)
+        {
+            string? prevFlowNode = null;
+            var prevFlowPort = "execOut";
+
+            foreach (var stmt in body.Statements)
+            {
+                if (stmt is IfStatementSyntax ifStmt)
                 {
-                    var type = match.Groups[1].Value;
-                    var varName = match.Groups[2].Value;
-                    var value = match.Groups[3].Value;
-                    
-                    NodeType nodeType;
-                    if (type == "int") nodeType = NodeType.LiteralInt;
-                    else if (type == "float") nodeType = NodeType.LiteralFloat;
-                    else if (type == "string") nodeType = NodeType.LiteralString;
-                    else if (type == "bool") nodeType = NodeType.LiteralBool;
-                    else continue;
-                    
-                    var nodeId = GenerateId();
-                    var node = new NodeData
-                    {
-                        Id = nodeId,
-                        Type = nodeType,
-                        Value = value,
-                        ValueType = type
-                    };
-                    graph.Nodes.Add(node);
-                    _variables[varName] = nodeId;
+                    VisitIfChain(ifStmt, prevFlowNode, prevFlowPort);
+                    prevFlowNode = null;
+                    prevFlowPort = "execOut";
                 }
-                
-                // Парсим операции
-                var operationPattern = @"(\w+)\s*=\s*(\w+)\s*([\+\-\*/])\s*(\w+);";
-                var operationMatches = Regex.Matches(code, operationPattern);
-                
-                foreach (Match match in operationMatches)
+                else
                 {
-                    var resultVar = match.Groups[1].Value;
-                    var leftVar = match.Groups[2].Value;
-                    var op = match.Groups[3].Value;
-                    var rightVar = match.Groups[4].Value;
-                    
-                    NodeType opType = op switch
+                    var host = VisitStatementForFlow(stmt, prevFlowNode, prevFlowPort);
+                    if (host != null)
                     {
-                        "+" => NodeType.MathAdd,
-                        "-" => NodeType.MathSubtract,
-                        "*" => NodeType.MathMultiply,
-                        "/" => NodeType.MathDivide,
-                        _ => NodeType.MathAdd
-                    };
-                    
-                    var opNodeId = GenerateId();
-                    var opNode = new NodeData
+                        prevFlowNode = host.NodeId;
+                        prevFlowPort = host.ExecOutPort;
+                    }
+                }
+            }
+        }
+
+        private sealed class FlowHost
+        {
+            public required string NodeId { get; init; }
+            public string ExecOutPort { get; init; } = "execOut";
+        }
+
+        private FlowHost? VisitStatementForFlow(StatementSyntax stmt, string? prevNode, string prevPort)
+        {
+            switch (stmt)
+            {
+                case LocalDeclarationStatementSyntax local:
+                    return VisitLocalDeclaration(local, prevNode, prevPort);
+                case ExpressionStatementSyntax exprStmt:
+                    return VisitExpressionStatement(exprStmt, prevNode, prevPort);
+                default:
+                    ReportUnsupported(stmt);
+                    return null;
+            }
+        }
+
+        private void ReportUnsupported(SyntaxNode node)
+        {
+            var span = node.SyntaxTree.GetLineSpan(node.Span);
+            _errors.Add(
+                $"Неподдерживаемая конструкция ({span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}): {node.Kind()}. MVP: только объявления, присваивания и if/else.");
+        }
+
+        private FlowHost? VisitLocalDeclaration(LocalDeclarationStatementSyntax local, string? prevNode, string prevPort)
+        {
+            FlowHost? last = null;
+            foreach (var v in local.Declaration.Variables)
+            {
+                var name = v.Identifier.Text;
+
+                if (v.Initializer == null)
+                {
+                    var span = local.SyntaxTree.GetLineSpan(v.Span);
+                    _errors.Add(
+                        $"Объявление без инициализатора не поддерживается ({span.StartLinePosition.Line + 1}).");
+                    continue;
+                }
+
+                var rootId = VisitExpression(v.Initializer.Value, true, name, out var unsupported);
+                if (unsupported)
+                    continue;
+
+                if (rootId == null)
+                    continue;
+
+                _symbolToNodeId[name] = rootId;
+
+                var host = new FlowHost { NodeId = rootId };
+                if (last != null)
+                    AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, "execIn");
+                else if (prevNode != null)
+                    AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+
+                last = host;
+            }
+
+            return last;
+        }
+
+        private FlowHost? VisitExpressionStatement(ExpressionStatementSyntax stmt, string? prevNode, string prevPort)
+        {
+            if (stmt.Expression is not AssignmentExpressionSyntax assign ||
+                assign.Left is not IdentifierNameSyntax)
+            {
+                ReportUnsupported(stmt);
+                return null;
+            }
+
+            if (assign.Kind() != SyntaxKind.SimpleAssignmentExpression)
+            {
+                ReportUnsupported(stmt);
+                return null;
+            }
+
+            var idLeft = (IdentifierNameSyntax)assign.Left;
+            var name = idLeft.Identifier.Text;
+            var rootId = VisitExpression(assign.Right, true, name, out var unsupported);
+            if (unsupported || rootId == null)
+                return null;
+
+            _symbolToNodeId[name] = rootId;
+
+            var host = new FlowHost { NodeId = rootId };
+            if (prevNode != null)
+                AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+            return host;
+        }
+
+        private void VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
+        {
+            var ifNodeId = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = ifNodeId,
+                Type = NodeType.FlowIf,
+                Value = "",
+                ValueType = "",
+                VariableName = ""
+            });
+
+            if (incomingNodeId != null && incomingPort != null)
+                AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
+
+            var condRoot = VisitExpression(stmt.Condition, false, null, out var badCond);
+            if (!badCond && condRoot != null)
+                AddEdge(condRoot, GetDataOutPortForNodeId(condRoot), ifNodeId, "condition");
+
+            var thenStmts = ExpandStatement(stmt.Statement);
+            ProcessBlockStatements(thenStmts, ifNodeId, "true");
+
+            if (stmt.Else == null)
+                return;
+
+            if (stmt.Else.Statement is IfStatementSyntax elseIf)
+            {
+                VisitIfChain(elseIf, ifNodeId, "false");
+            }
+            else
+            {
+                var elseNodeId = NewId();
+                _graph.Nodes.Add(new NodeData
+                {
+                    Id = elseNodeId,
+                    Type = NodeType.FlowElse,
+                    Value = "",
+                    ValueType = "",
+                    VariableName = ""
+                });
+                AddEdge(ifNodeId, "false", elseNodeId, "execIn");
+                var elseStmts = ExpandStatement(stmt.Else.Statement);
+                ProcessBlockStatements(elseStmts, elseNodeId, "execOut");
+            }
+        }
+
+        private static IReadOnlyList<StatementSyntax> ExpandStatement(StatementSyntax statement)
+        {
+            if (statement is BlockSyntax block)
+                return block.Statements.ToList();
+            return new List<StatementSyntax> { statement };
+        }
+
+        private void ProcessBlockStatements(
+            IReadOnlyList<StatementSyntax> statements,
+            string entryFromNodeId,
+            string entryFromPort)
+        {
+            string? prevId = null;
+            var prevPort = "execOut";
+            var first = true;
+
+            foreach (var st in statements)
+            {
+                if (st is IfStatementSyntax nestedIf)
+                {
+                    if (first)
+                        VisitIfChain(nestedIf, entryFromNodeId, entryFromPort);
+                    else
+                        VisitIfChain(nestedIf, prevId, prevPort);
+
+                    first = false;
+                    prevId = null;
+                    prevPort = "execOut";
+                    continue;
+                }
+
+                var host = VisitStatementForFlow(st, first ? entryFromNodeId : prevId, first ? entryFromPort : prevPort);
+                first = false;
+                if (host != null)
+                {
+                    prevId = host.NodeId;
+                    prevPort = host.ExecOutPort;
+                }
+            }
+        }
+
+        private string? VisitExpression(ExpressionSyntax expr, bool isRoot, string? assignVariableToRoot, out bool unsupported)
+        {
+            unsupported = false;
+            while (expr is ParenthesizedExpressionSyntax paren)
+                expr = paren.Expression;
+
+            switch (expr)
+            {
+                case LiteralExpressionSyntax lit:
+                    return CreateLiteralFromLiteralExpression(lit, isRoot ? assignVariableToRoot : null);
+
+                case IdentifierNameSyntax id:
+                    return ResolveIdentifier(id, out unsupported);
+
+                case BinaryExpressionSyntax bin:
+                    return VisitBinary(bin, isRoot, assignVariableToRoot, out unsupported);
+
+                case PrefixUnaryExpressionSyntax pre when pre.IsKind(SyntaxKind.LogicalNotExpression):
+                {
+                    var inner = VisitExpression(pre.Operand, false, null, out unsupported);
+                    if (unsupported || inner == null)
+                        return null;
+                    var notId = NewId();
+                    var vn = isRoot && !string.IsNullOrEmpty(assignVariableToRoot) ? assignVariableToRoot! : "";
+                    _graph.Nodes.Add(new NodeData
                     {
-                        Id = opNodeId,
-                        Type = opType,
+                        Id = notId,
+                        Type = NodeType.LogicalNot,
                         Value = "",
-                        ValueType = ""
-                    };
-                    graph.Nodes.Add(opNode);
-                    
-                    if (_variables.ContainsKey(leftVar))
-                    {
-                        graph.Edges.Add(new EdgeData
-                        {
-                            FromNodeId = _variables[leftVar],
-                            ToNodeId = opNodeId
-                        });
-                    }
-                    
-                    if (_variables.ContainsKey(rightVar))
-                    {
-                        graph.Edges.Add(new EdgeData
-                        {
-                            FromNodeId = _variables[rightVar],
-                            ToNodeId = opNodeId
-                        });
-                    }
-                    
-                    var resultNodeId = GenerateId();
-                    var resultNode = new NodeData
-                    {
-                        Id = resultNodeId,
-                        Type = NodeType.VariableDeclaration,
-                        Value = resultVar,
-                        ValueType = "var"
-                    };
-                    graph.Nodes.Add(resultNode);
-                    
-                    graph.Edges.Add(new EdgeData
-                    {
-                        FromNodeId = opNodeId,
-                        ToNodeId = resultNodeId
+                        ValueType = "",
+                        VariableName = vn
                     });
-                    
-                    _variables[resultVar] = resultNodeId;
+                    AddEdge(inner, GetDataOutPortForNodeId(inner), notId, "input");
+                    return notId;
                 }
+
+                default:
+                    unsupported = true;
+                    var span = expr.SyntaxTree.GetLineSpan(expr.Span);
+                    _errors.Add(
+                        $"Неподдерживаемое выражение ({span.StartLinePosition.Line + 1}): {expr.Kind()}.");
+                    return null;
             }
-            catch (System.Exception ex)
+        }
+
+        private string? VisitBinary(BinaryExpressionSyntax bin, bool isRoot, string? assignVariableToRoot, out bool unsupported)
+        {
+            unsupported = false;
+            var kind = bin.Kind();
+            NodeType? opType = kind switch
             {
-                errors.Add($"Ошибка парсинга: {ex.Message}");
+                SyntaxKind.AddExpression => NodeType.MathAdd,
+                SyntaxKind.SubtractExpression => NodeType.MathSubtract,
+                SyntaxKind.MultiplyExpression => NodeType.MathMultiply,
+                SyntaxKind.DivideExpression => NodeType.MathDivide,
+                SyntaxKind.ModuloExpression => NodeType.MathModulo,
+                SyntaxKind.EqualsExpression => NodeType.CompareEqual,
+                SyntaxKind.NotEqualsExpression => NodeType.CompareNotEqual,
+                SyntaxKind.GreaterThanExpression => NodeType.CompareGreater,
+                SyntaxKind.LessThanExpression => NodeType.CompareLess,
+                SyntaxKind.GreaterThanOrEqualExpression => NodeType.CompareGreaterOrEqual,
+                SyntaxKind.LessThanOrEqualExpression => NodeType.CompareLessOrEqual,
+                SyntaxKind.LogicalAndExpression => NodeType.LogicalAnd,
+                SyntaxKind.LogicalOrExpression => NodeType.LogicalOr,
+                _ => null
+            };
+
+            if (opType == null)
+            {
+                unsupported = true;
+                var span = bin.SyntaxTree.GetLineSpan(bin.Span);
+                _errors.Add(
+                    $"Неподдерживаемый оператор ({span.StartLinePosition.Line + 1}): {kind}.");
+                return null;
             }
-            
-            return new ParseResult
+
+            var leftPort = IsMath(opType.Value) ? "inputA" : "left";
+            var rightPort = IsMath(opType.Value) ? "inputB" : "right";
+
+            var leftId = VisitExpression(bin.Left, false, null, out unsupported);
+            if (unsupported)
+                return null;
+            var rightId = VisitExpression(bin.Right, false, null, out unsupported);
+            if (unsupported)
+                return null;
+
+            if (leftId == null || rightId == null)
+                return null;
+
+            var opId = NewId();
+            var varName = isRoot && !string.IsNullOrEmpty(assignVariableToRoot) ? assignVariableToRoot! : "";
+            _graph.Nodes.Add(new NodeData
             {
-                Graph = graph,
-                Errors = errors
+                Id = opId,
+                Type = opType.Value,
+                Value = "",
+                ValueType = "",
+                VariableName = varName
+            });
+
+            AddEdge(leftId, GetDataOutPortForNodeId(leftId), opId, leftPort);
+            AddEdge(rightId, GetDataOutPortForNodeId(rightId), opId, rightPort);
+            return opId;
+        }
+
+        private static bool IsMath(NodeType t) =>
+            t is NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply
+                or NodeType.MathDivide or NodeType.MathModulo;
+
+        private string? ResolveIdentifier(IdentifierNameSyntax id, out bool unsupported)
+        {
+            unsupported = false;
+            var name = id.Identifier.Text;
+            if (_symbolToNodeId.TryGetValue(name, out var nodeId))
+                return nodeId;
+
+            unsupported = true;
+            var span = id.SyntaxTree.GetLineSpan(id.Span);
+            _errors.Add(
+                $"Неизвестный идентификатор «{name}» ({span.StartLinePosition.Line + 1}).");
+            return null;
+        }
+
+        private string? CreateLiteralFromLiteralExpression(LiteralExpressionSyntax lit, string? variableName)
+        {
+            NodeType type;
+            string value;
+            string valueType;
+
+            switch (lit.Kind())
+            {
+                case SyntaxKind.NumericLiteralExpression:
+                    var text = lit.Token.Text;
+                    if (text.Contains('.') || text.EndsWith("f", StringComparison.OrdinalIgnoreCase))
+                    {
+                        type = NodeType.LiteralFloat;
+                        valueType = "float";
+                        value = text.TrimEnd('f', 'F');
+                    }
+                    else
+                    {
+                        type = NodeType.LiteralInt;
+                        valueType = "int";
+                        value = text;
+                    }
+                    break;
+
+                case SyntaxKind.StringLiteralExpression:
+                    type = NodeType.LiteralString;
+                    valueType = "string";
+                    value = lit.Token.ValueText ?? "";
+                    break;
+
+                case SyntaxKind.TrueLiteralExpression:
+                case SyntaxKind.FalseLiteralExpression:
+                    type = NodeType.LiteralBool;
+                    valueType = "bool";
+                    value = lit.Token.ValueText ?? lit.Token.Text;
+                    break;
+
+                default:
+                    var span = lit.SyntaxTree.GetLineSpan(lit.Span);
+                    _errors.Add(
+                        $"Неподдерживаемый литерал ({span.StartLinePosition.Line + 1}): {lit.Kind()}.");
+                    return null;
+            }
+
+            var id = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = type,
+                Value = value,
+                ValueType = valueType,
+                VariableName = variableName ?? ""
+            });
+            return id;
+        }
+
+        private string GetDataOutPortForNodeId(string nodeId)
+        {
+            var n = _graph.Nodes.FirstOrDefault(x => x.Id == nodeId);
+            if (n == null)
+                return "output";
+            return GetDataOutPort(n.Type);
+        }
+
+        private static string GetDataOutPort(NodeType type)
+        {
+            if (IsMath(type))
+                return "output";
+            return type switch
+            {
+                NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString => "output",
+                NodeType.CompareEqual or NodeType.CompareGreater or NodeType.CompareLess
+                    or NodeType.CompareNotEqual or NodeType.CompareGreaterOrEqual
+                    or NodeType.CompareLessOrEqual => "result",
+                NodeType.LogicalAnd or NodeType.LogicalOr or NodeType.LogicalNot => "result",
+                _ => "output"
             };
         }
-        
-        private string GenerateId()
+
+        private void AddEdge(string fromId, string fromPort, string toId, string toPort)
         {
-            return $"node_{_nodeCounter++}";
+            _graph.Edges.Add(new EdgeData
+            {
+                FromNodeId = fromId,
+                FromPort = fromPort,
+                ToNodeId = toId,
+                ToPort = toPort
+            });
         }
+
+        private string NewId() => $"node_{_nodeCounter++}";
     }
 }

@@ -10,16 +10,16 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
     {
         public override NodeType NodeType => NodeType.LiteralFloat;
 
-        [Output("Value")]
-        public float value;
+        [Output("output")]
+        public float output;
 
         public float floatValue = 0f;
 
-        public override string name => $"Float: {floatValue}";
-        
+        public override string name => string.IsNullOrEmpty(variableName) ? $"Float: {floatValue}" : $"{variableName} = {floatValue}";
+
         protected override void Process()
         {
-            value = floatValue;
+            output = floatValue;
         }
 
         public override void InitializeFromData(NodeData data)

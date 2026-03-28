@@ -20,8 +20,13 @@ namespace CustomVisualScripting.Integration
                 Debug.LogError("[VS] Код пуст");
                 return new ParseResult { Errors = new System.Collections.Generic.List<string> { "Код пуст" } };
             }
-            
-            return _parser.Parse(code);
+
+            var result = _parser.Parse(code);
+            if (result.HasErrors)
+                Debug.LogWarning($"[VS] Parse: ошибок={result.Errors.Count}");
+            else
+                Debug.Log($"[VS] Parse OK: Nodes={result.Graph.Nodes.Count}, Edges={result.Graph.Edges.Count}");
+            return result;
         }
     }
 }

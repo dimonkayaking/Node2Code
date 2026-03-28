@@ -28,7 +28,7 @@ namespace CustomVisualScripting.Runtime.Execution
                     var node = graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
                     if (node != null)
                     {
-                        var result = _executor.ExecuteNode(node, _context);
+                        var result = _executor.ExecuteNode(node, _context, graph);
                         if (result != null)
                         {
                             _context[node.Id] = result;

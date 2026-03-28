@@ -7,10 +7,13 @@ using VisualScripting.Core.Models;
 namespace CustomVisualScripting.Editor.Nodes.Base
 {
     [Serializable]
-    public abstract class CustomBaseNode : GraphProcessor.BaseNode
+    public abstract class CustomBaseNode : BaseExecutionNode
     {
         [HideInInspector]
         public string NodeId;
+
+        [HideInInspector]
+        public string variableName = "";
 
         public abstract NodeType NodeType { get; }
 
@@ -46,6 +49,7 @@ namespace CustomVisualScripting.Editor.Nodes.Base
         public virtual void InitializeFromData(NodeData data)
         {
             NodeId = data.Id;
+            variableName = data.VariableName ?? "";
             SetGUID(NodeId);
         }
 
@@ -57,6 +61,7 @@ namespace CustomVisualScripting.Editor.Nodes.Base
                 Type = NodeType,
                 Value = "",
                 ValueType = "",
+                VariableName = variableName ?? "",
                 InputConnections = new Dictionary<string, string>(),
                 ExecutionFlow = new Dictionary<string, string>()
             };

@@ -10,16 +10,16 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
     {
         public override NodeType NodeType => NodeType.LiteralInt;
 
-        [Output("Value")]
-        public int value;
+        [Output("output")]
+        public int output;
 
         public int intValue = 0;
 
-        public override string name => $"Int: {intValue}";
-        
+        public override string name => string.IsNullOrEmpty(variableName) ? $"Int: {intValue}" : $"{variableName} = {intValue}";
+
         protected override void Process()
         {
-            value = intValue;
+            output = intValue;
         }
 
         public override void InitializeFromData(NodeData data)
