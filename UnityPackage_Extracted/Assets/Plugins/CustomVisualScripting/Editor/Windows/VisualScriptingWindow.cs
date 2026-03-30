@@ -138,6 +138,9 @@ namespace CustomVisualScripting.Editor.Windows
             
             _toolbar.SetStatusWarning("Генерация...");
             
+            // Синхронизируем значения из визуальных нод перед генерацией
+            SyncNodeValuesFromView();
+            
             string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
             _codeEditor.Code = code;
             
@@ -173,6 +176,8 @@ namespace CustomVisualScripting.Editor.Windows
                 return;
             }
 
+            // Синхронизируем значения из визуальных нод перед сохранением
+            SyncNodeValuesFromView();
             SaveVisualNodePositions();
 
             if (GraphSaver.SaveToJson(_currentGraph, _currentFilePath))
@@ -194,6 +199,8 @@ namespace CustomVisualScripting.Editor.Windows
             string path = EditorUtility.SaveFilePanel("Сохранить граф как", Application.dataPath, defaultName, "json");
             if (string.IsNullOrEmpty(path)) return;
 
+            // Синхронизируем значения из визуальных нод перед сохранением
+            SyncNodeValuesFromView();
             SaveVisualNodePositions();
             _currentFilePath = path;
 
@@ -252,6 +259,31 @@ namespace CustomVisualScripting.Editor.Windows
             }
         }
         
+        private void SyncNodeValuesFromView()
+        {
+            if (_graphView == null || _currentGraph?.LogicGraph?.Nodes == null)
+                return;
+            
+            foreach (var nodeView in _graphView.nodeViews)
+            {
+                if (nodeView.nodeTarget is CustomBaseNode customNode)
+                {
+                    var nodeData = _currentGraph.LogicGraph.Nodes.FirstOrDefault(n => n.Id == customNode.NodeId);
+                    if (nodeData != null)
+                    {
+                        if (customNode is IntNode intNode)
+                            nodeData.Value = intNode.intValue.ToString();
+                        else if (customNode is FloatNode floatNode)
+                            nodeData.Value = floatNode.floatValue.ToString();
+                        else if (customNode is BoolNode boolNode)
+                            nodeData.Value = boolNode.boolValue.ToString();
+                        else if (customNode is StringNode stringNode)
+                            nodeData.Value = stringNode.stringValue;
+                    }
+                }
+            }
+        }
+        
         private void UpdateGraphView()
         {
             _graphContainer.Clear();
@@ -273,7 +305,6 @@ namespace CustomVisualScripting.Editor.Windows
                 
                 _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
                 
-                // Создаём ноды
                 foreach (var nodeData in _currentGraph.LogicGraph.Nodes)
                 {
                     var node = CreateNodeFromData(nodeData);
@@ -282,7 +313,15 @@ namespace CustomVisualScripting.Editor.Windows
                         node.NodeId = nodeData.Id;
                         node.InitializeFromData(nodeData);
                         
-                        // GUID устанавливается в InitializeFromData или Enable
+                        if (node is IntNode intNode && int.TryParse(nodeData.Value, out int intVal))
+                            intNode.intValue = intVal;
+                        else if (node is FloatNode floatNode && float.TryParse(nodeData.Value, out float floatVal))
+                            floatNode.floatValue = floatVal;
+                        else if (node is BoolNode boolNode && bool.TryParse(nodeData.Value, out bool boolVal))
+                            boolNode.boolValue = boolVal;
+                        else if (node is StringNode stringNode)
+                            stringNode.stringValue = nodeData.Value;
+                        
                         _internalGraph.AddNode(node);
                     }
                 }
@@ -297,12 +336,10 @@ namespace CustomVisualScripting.Editor.Windows
                     return;
                 }
                 
-                // Создаём визуальное представление
                 _graphView = new BaseGraphView(this);
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 
-                // Восстанавливаем позиции
                 if (_currentGraph.VisualNodes != null && _currentGraph.VisualNodes.Count > 0)
                 {
                     foreach (var nodeView in _graphView.nodeViews)
@@ -319,7 +356,6 @@ namespace CustomVisualScripting.Editor.Windows
                 }
                 else
                 {
-                    // Располагаем ноды сеткой
                     int index = 0;
                     foreach (var nodeView in _graphView.nodeViews)
                     {
@@ -330,7 +366,6 @@ namespace CustomVisualScripting.Editor.Windows
                     }
                 }
                 
-                // Центрируем граф
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
                 

@@ -15,10 +15,10 @@ namespace CustomVisualScripting.Editor.Nodes.Flow
         public bool condition;
 
         [Output("true")]
-        public global::CustomVisualScripting.Editor.Nodes.Base.Flow trueBranch;
+        public object trueBranch;
 
         [Output("false")]
-        public global::CustomVisualScripting.Editor.Nodes.Base.Flow falseBranch;
+        public object falseBranch;
 
         public override string name => "If";
 

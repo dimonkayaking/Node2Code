@@ -23,7 +23,14 @@ namespace CustomVisualScripting.Editor.Nodes.Comparison
 
         protected override void Process()
         {
-            result = !left.Equals(right);
+            if (left != null && right != null)
+            {
+                result = !left.Equals(right);
+            }
+            else
+            {
+                result = (left == null) != (right == null);
+            }
         }
     }
 }

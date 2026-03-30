@@ -21,7 +21,6 @@ namespace CustomVisualScripting.Editor.Nodes.Base
         {
             base.Enable();
             
-            // Если GUID не установлен, генерируем его через OnNodeCreated()
             if (string.IsNullOrEmpty(GUID))
             {
                 OnNodeCreated();
@@ -36,8 +35,6 @@ namespace CustomVisualScripting.Editor.Nodes.Base
         public void SetGUID(string guid)
         {
             if (string.IsNullOrEmpty(guid)) return;
-            
-            // Устанавливаем GUID напрямую (поле публичное)
             GUID = guid;
         }
 
