@@ -19,29 +19,28 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         [Output("Out")]
         public object output;
 
-        public string variableNameValue = "";
+        public new string variableName = "";
         public string variableType = "object";
 
-        public override string name => $"Declare: {variableNameValue} : {variableType}";
-
+        public override string name => $"Declare: {variableName} : {variableType}";
+        
         protected override void Process()
         {
-            nameInput = variableNameValue;
+            nameInput = variableName;
             output = value;
         }
 
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableNameValue = data.Value;
+            variableName = data.Value;
             variableType = data.ValueType;
         }
 
         public override NodeData ToNodeData()
         {
-            variableName = variableNameValue;
             var data = base.ToNodeData();
-            data.Value = variableNameValue;
+            data.Value = variableName;
             data.ValueType = variableType;
             return data;
         }

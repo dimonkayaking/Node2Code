@@ -11,7 +11,7 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override NodeType NodeType => NodeType.VariableSet;
 
         [Input("Variable Name")]
-        public string variableName;
+        public string variableNameInput;
 
         [Input("Value")]
         public object value;
@@ -19,13 +19,13 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         [Output("Out")]
         public object output;
 
-        public string variableNameValue = "";
+        public new string variableName = "";
 
-        public override string name => $"Set: {variableNameValue}";
+        public override string name => $"Set: {variableName}";
         
         protected override void Process()
         {
-            variableName = variableNameValue;
+            variableNameInput = variableName;
             output = value;
             // TODO: Установить значение переменной
         }
@@ -33,13 +33,13 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableNameValue = data.Value;
+            variableName = data.Value;
         }
 
         public override NodeData ToNodeData()
         {
             var data = base.ToNodeData();
-            data.Value = variableNameValue;
+            data.Value = variableName;
             data.ValueType = "string";
             return data;
         }

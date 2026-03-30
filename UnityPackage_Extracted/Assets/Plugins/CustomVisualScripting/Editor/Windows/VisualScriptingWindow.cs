@@ -138,7 +138,6 @@ namespace CustomVisualScripting.Editor.Windows
             
             _toolbar.SetStatusWarning("Генерация...");
             
-            // Синхронизируем значения из визуальных нод перед генерацией
             SyncNodeValuesFromView();
             
             string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
@@ -176,7 +175,6 @@ namespace CustomVisualScripting.Editor.Windows
                 return;
             }
 
-            // Синхронизируем значения из визуальных нод перед сохранением
             SyncNodeValuesFromView();
             SaveVisualNodePositions();
 
@@ -199,7 +197,6 @@ namespace CustomVisualScripting.Editor.Windows
             string path = EditorUtility.SaveFilePanel("Сохранить граф как", Application.dataPath, defaultName, "json");
             if (string.IsNullOrEmpty(path)) return;
 
-            // Синхронизируем значения из визуальных нод перед сохранением
             SyncNodeValuesFromView();
             SaveVisualNodePositions();
             _currentFilePath = path;
@@ -271,14 +268,38 @@ namespace CustomVisualScripting.Editor.Windows
                     var nodeData = _currentGraph.LogicGraph.Nodes.FirstOrDefault(n => n.Id == customNode.NodeId);
                     if (nodeData != null)
                     {
+                        bool valueChanged = false;
+                        
                         if (customNode is IntNode intNode)
+                        {
+                            var oldValue = nodeData.Value;
                             nodeData.Value = intNode.intValue.ToString();
+                            valueChanged = oldValue != nodeData.Value;
+                        }
                         else if (customNode is FloatNode floatNode)
+                        {
+                            var oldValue = nodeData.Value;
                             nodeData.Value = floatNode.floatValue.ToString();
+                            valueChanged = oldValue != nodeData.Value;
+                        }
                         else if (customNode is BoolNode boolNode)
+                        {
+                            var oldValue = nodeData.Value;
                             nodeData.Value = boolNode.boolValue.ToString();
+                            valueChanged = oldValue != nodeData.Value;
+                        }
                         else if (customNode is StringNode stringNode)
+                        {
+                            var oldValue = nodeData.Value;
                             nodeData.Value = stringNode.stringValue;
+                            valueChanged = oldValue != nodeData.Value;
+                        }
+                        
+                        if (valueChanged)
+                        {
+                            nodeView.title = customNode.name;
+                            nodeView.MarkDirtyRepaint();
+                        }
                     }
                 }
             }
@@ -339,6 +360,15 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphView = new BaseGraphView(this);
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
+                
+                // Обновляем названия нод после создания
+                foreach (var nodeView in _graphView.nodeViews)
+                {
+                    if (nodeView.nodeTarget is CustomBaseNode customNode)
+                    {
+                        nodeView.title = customNode.name;
+                    }
+                }
                 
                 if (_currentGraph.VisualNodes != null && _currentGraph.VisualNodes.Count > 0)
                 {

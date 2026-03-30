@@ -11,18 +11,18 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override NodeType NodeType => NodeType.VariableGet;
 
         [Input("Variable Name")]
-        public string variableName;
+        public string variableNameInput;
 
         [Output("Value")]
         public object value;
 
-        public string variableNameValue = "";
+        public new string variableName = "";
 
-        public override string name => $"Get: {variableNameValue}";
+        public override string name => $"Get: {variableName}";
         
         protected override void Process()
         {
-            variableName = variableNameValue;
+            variableNameInput = variableName;
             // TODO: Получить значение из переменной
             value = null;
         }
@@ -30,13 +30,13 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableNameValue = data.Value;
+            variableName = data.Value;
         }
 
         public override NodeData ToNodeData()
         {
             var data = base.ToNodeData();
-            data.Value = variableNameValue;
+            data.Value = variableName;
             data.ValueType = "string";
             return data;
         }

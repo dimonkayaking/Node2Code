@@ -14,10 +14,10 @@ namespace CustomVisualScripting.Editor.Nodes.Unity
         public GameObject gameObject;
 
         [Input("Position")]
-        public Vector3 position;
+        public new Vector3 position;
 
         [Output("Out")]
-        public new GameObject output;
+        public GameObject output;  // ← убрал new
 
         public override string name => "Set Position";
         
