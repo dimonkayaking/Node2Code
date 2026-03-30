@@ -7,7 +7,7 @@ using VisualScripting.Core.Models;
 namespace CustomVisualScripting.Editor.Nodes.Base
 {
     [Serializable]
-    public abstract class CustomBaseNode : BaseExecutionNode
+    public abstract class CustomBaseNode : GraphProcessor.BaseNode
     {
         [HideInInspector]
         public string NodeId;
@@ -20,14 +20,16 @@ namespace CustomVisualScripting.Editor.Nodes.Base
         protected override void Enable()
         {
             base.Enable();
+            
+            // Если GUID не установлен, генерируем его через OnNodeCreated()
+            if (string.IsNullOrEmpty(GUID))
+            {
+                OnNodeCreated();
+            }
+            
             if (string.IsNullOrEmpty(NodeId))
             {
-                NodeId = System.Guid.NewGuid().ToString();
-                SetGUID(NodeId);
-            }
-            else
-            {
-                SetGUID(NodeId);
+                NodeId = GUID;
             }
         }
 
@@ -35,15 +37,8 @@ namespace CustomVisualScripting.Editor.Nodes.Base
         {
             if (string.IsNullOrEmpty(guid)) return;
             
-            var guidField = typeof(GraphProcessor.BaseNode).GetField("_GUID", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (guidField != null)
-            {
-                var currentValue = guidField.GetValue(this);
-                if (currentValue == null || string.IsNullOrEmpty(currentValue.ToString()))
-                {
-                    guidField.SetValue(this, guid);
-                }
-            }
+            // Устанавливаем GUID напрямую (поле публичное)
+            GUID = guid;
         }
 
         public virtual void InitializeFromData(NodeData data)

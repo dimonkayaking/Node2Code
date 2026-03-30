@@ -8,6 +8,12 @@ using GraphProcessor;
 using CustomVisualScripting.Integration;
 using CustomVisualScripting.Integration.Models;
 using CustomVisualScripting.Windows.Views;
+using CustomVisualScripting.Editor.Nodes.Base;
+using CustomVisualScripting.Editor.Nodes.Literals;
+using CustomVisualScripting.Editor.Nodes.Math;
+using CustomVisualScripting.Editor.Nodes.Comparison;
+using CustomVisualScripting.Editor.Nodes.Flow;
+using CustomVisualScripting.Editor.Nodes.Debug;
 using VisualScripting.Core.Models;
 using CustomToolbar = CustomVisualScripting.Windows.Views.ToolbarView;
 
@@ -238,7 +244,7 @@ namespace CustomVisualScripting.Editor.Windows
             foreach (var vnd in _currentGraph.VisualNodes)
             {
                 var nodeView = _graphView.nodeViews?.FirstOrDefault(
-                    nv => (nv.nodeTarget as dynamic)?.NodeId == vnd.NodeId);
+                    nv => (nv.nodeTarget as CustomBaseNode)?.NodeId == vnd.NodeId);
                 if (nodeView != null)
                 {
                     vnd.Position = nodeView.GetPosition().position;
@@ -260,19 +266,92 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphContainer.Add(placeholder);
                 return;
             }
-
-            var posDict = new System.Collections.Generic.Dictionary<string, Vector2>();
-            if (_currentGraph.VisualNodes != null)
+            
+            try
             {
-                foreach (var vn in _currentGraph.VisualNodes)
-                    posDict[vn.NodeId] = vn.Position;
+                CleanupGraph();
+                
+                _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
+                
+                // Создаём ноды
+                foreach (var nodeData in _currentGraph.LogicGraph.Nodes)
+                {
+                    var node = CreateNodeFromData(nodeData);
+                    if (node != null)
+                    {
+                        node.NodeId = nodeData.Id;
+                        node.InitializeFromData(nodeData);
+                        
+                        // GUID устанавливается в InitializeFromData или Enable
+                        _internalGraph.AddNode(node);
+                    }
+                }
+                
+                if (_internalGraph.nodes.Count == 0)
+                {
+                    var placeholder = new Label("Не удалось создать узлы для отображения");
+                    placeholder.style.marginTop = 20;
+                    placeholder.style.marginLeft = 10;
+                    placeholder.style.color = Color.yellow;
+                    _graphContainer.Add(placeholder);
+                    return;
+                }
+                
+                // Создаём визуальное представление
+                _graphView = new BaseGraphView(this);
+                _graphView.Initialize(_internalGraph);
+                _graphView.style.flexGrow = 1;
+                
+                // Восстанавливаем позиции
+                if (_currentGraph.VisualNodes != null && _currentGraph.VisualNodes.Count > 0)
+                {
+                    foreach (var nodeView in _graphView.nodeViews)
+                    {
+                        if (nodeView.nodeTarget is CustomBaseNode customNode)
+                        {
+                            var visualNode = _currentGraph.VisualNodes.FirstOrDefault(v => v.NodeId == customNode.NodeId);
+                            if (visualNode != null)
+                            {
+                                nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Располагаем ноды сеткой
+                    int index = 0;
+                    foreach (var nodeView in _graphView.nodeViews)
+                    {
+                        float x = 100 + (index % 5) * 200;
+                        float y = 100 + (index / 5) * 150;
+                        nodeView.SetPosition(new Rect(x, y, 100, 50));
+                        index++;
+                    }
+                }
+                
+                // Центрируем граф
+                _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
+                _graphView.FrameAll();
+                
+                _graphContainer.Add(_graphView);
+                
+                _toolbar.SetStatusSuccess($"Отображено {_internalGraph.nodes.Count} нод");
             }
-
+            catch (Exception e)
+            {
+                Debug.LogError($"[VS] Ошибка создания графа: {e.Message}\n{e.StackTrace}");
+                ShowTextualGraph();
+            }
+        }
+        
+        private void ShowTextualGraph()
+        {
             var info = new VisualElement();
             info.style.marginTop = 10;
             info.style.marginLeft = 10;
             info.style.flexGrow = 1;
-
+            
             int edgeCount = _currentGraph.LogicGraph.Edges?.Count ?? 0;
             var label = new Label($"Граф: {_currentGraph.LogicGraph.Nodes.Count} нод, {edgeCount} связей");
             label.style.color = Color.white;
@@ -286,8 +365,8 @@ namespace CustomVisualScripting.Editor.Windows
                 var displayName = GraphConverter.GetNodeDisplayName(node.Type);
                 var varPart = string.IsNullOrEmpty(node.VariableName) ? "" : $" [{node.VariableName}]";
                 var valPart = string.IsNullOrEmpty(node.Value) ? "" : $" = {node.Value}";
-
-                var text = $"  {node.Id}: {displayName}{varPart}{valPart}";
+                
+                var text = $"  • {displayName}{varPart}{valPart} (ID: {node.Id})";
                 var nodeLabel = new Label(text);
                 nodeLabel.style.color = color;
                 nodeLabel.style.marginLeft = 20;
@@ -296,6 +375,29 @@ namespace CustomVisualScripting.Editor.Windows
             }
             
             _graphContainer.Add(info);
+        }
+        
+        private CustomBaseNode CreateNodeFromData(NodeData data)
+        {
+            if (data == null) return null;
+            
+            switch (data.Type)
+            {
+                case NodeType.LiteralInt: return new IntNode();
+                case NodeType.LiteralFloat: return new FloatNode();
+                case NodeType.LiteralBool: return new BoolNode();
+                case NodeType.LiteralString: return new StringNode();
+                case NodeType.MathAdd: return new AddNode();
+                case NodeType.MathSubtract: return new SubtractNode();
+                case NodeType.MathMultiply: return new MultiplyNode();
+                case NodeType.MathDivide: return new DivideNode();
+                case NodeType.CompareEqual: return new EqualNode();
+                case NodeType.CompareGreater: return new GreaterNode();
+                case NodeType.CompareLess: return new LessNode();
+                case NodeType.FlowIf: return new IfNode();
+                case NodeType.DebugLog: return new DebugLogNode();
+                default: return null;
+            }
         }
         
         private void OnDestroy()
