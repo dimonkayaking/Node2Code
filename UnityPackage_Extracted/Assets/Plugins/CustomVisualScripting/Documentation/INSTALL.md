@@ -1,12 +1,62 @@
-## Установка
+## **Инструкция по установке плагина Custom Visual Scripting**
 
-### Через Package Manager (Git)
-1. Window → Package Manager
-2. + → Add package from git URL
-3. Вставить: `https://github.com/yourcompany/VisualScripting.git`
-4. Нажать Add
+### **Шаг 1: Импорт плагина**
 
-### Через .unitypackage
-1. Скачать VisualScripting.unitypackage
-2. Assets → Import Package → Custom Package
-3. Выбрать файл и нажать Import
+1. **Скопируйте файл** `CustomVisualScripting.unitypackage` в удобное место (например, на рабочий стол)
+
+2. **Откройте Unity проект**, в который хотите установить плагин
+
+3. **Импортируйте плагин**:
+   - В меню Unity выберите: **Assets → Import Package → Custom Package...**
+   - Или **нажмите правой кнопкой мыши** в окне Project → **Import Package → Custom Package...**
+   - Выберите файл `CustomVisualScripting.unitypackage`
+   - В открывшемся окне нажмите **Import**
+
+---
+
+### **Шаг 2: Установка GraphProcessor через Package Manager**
+
+1. В Unity откройте: **Window → Package Manager**
+
+2. Нажмите кнопку **+** (плюс) в левом верхнем углу
+
+3. Выберите **Add package from git URL...**
+
+4. Вставьте ссылку:
+   ```
+   https://github.com/Warwlock/NodeGraphProcessor.git
+   ```
+
+5. Нажмите **Add**
+
+---
+
+### **Шаг 3: Установка Newtonsoft.Json через Package Manager**
+
+1. В Package Manager снова нажмите **+**
+
+2. Выберите **Add package by name...**
+
+3. Введите:
+   ```
+   com.unity.nuget.newtonsoft-json
+   ```
+
+4. Нажмите **Add**
+
+---
+
+### **Шаг 4: Завершение установки**
+
+1. **Дождитесь** завершения компиляции (будет индикатор загрузки)
+
+4. **Откройте плагин**: в меню Unity выберите **Tools → Visual Scripting**
+
+---
+
+### **Готово! 🎉**
+
+Плагин установлен. Теперь вы можете:
+- Парсить C# код в визуальный граф
+- Генерировать код из графа
+- Сохранять и загружать графы
