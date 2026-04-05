@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import './Plugin.css';
 
 const capabilities = [
@@ -51,8 +51,8 @@ const Plugin: React.FC = () => {
 
           <div className="plugin-hero__stats">
             <div>
-              <strong>Windows и Mac</strong>
-              <span>готовые установщики для быстрого старта</span>
+              <strong>Одна версия для всех ОС</strong>
+              <span>единый пакет плагина для быстрого старта на любой платформе</span>
             </div>
             <div>
               <strong>Ноды ↔ C#</strong>
@@ -91,19 +91,15 @@ const Plugin: React.FC = () => {
             <span className="plugin-eyebrow">Установка</span>
             <h2>Установщики</h2>
             <p>
-              Выберите нужную платформу и установите плагин в рабочую среду Unity.
+              Скачайте единую версию плагина и установите её в рабочую среду Unity.
               После установки можно сразу открыть визуальный редактор и начать собирать логику проекта.
             </p>
           </div>
 
           <div className="install-grid">
-            <a className="install-tile" href="/image.png" download="unity-node-bridge-windows.png">
-              <strong>Скачать для Windows</strong>
-              <span>Инсталлятор для основной рабочей среды Unity-разработки</span>
-            </a>
-            <a className="install-tile" href="/image.png" download="unity-node-bridge-mac.png">
-              <strong>Скачать для Mac</strong>
-              <span>Версия для macOS с тем же визуальным редактором и рабочим процессом</span>
+            <a className="install-tile" href="/image.png" download="unity-node-bridge-package.png">
+              <strong>Скачать плагин</strong>
+              <span>Единая версия пакета для работы на любой поддерживаемой операционной системе</span>
             </a>
           </div>
         </section>

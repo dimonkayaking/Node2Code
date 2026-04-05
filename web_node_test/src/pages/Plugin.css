@@ -1,4 +1,4 @@
-.plugin-page {
+﻿.plugin-page {
   max-width: 1240px;
   margin: 90px auto 40px;
   padding: 0 1rem;
@@ -230,6 +230,10 @@
 .install-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 1rem;
+}
+
+.plugin-card--install .install-grid {
+  grid-template-columns: 1fr;
 }
 
 .install-tile,
