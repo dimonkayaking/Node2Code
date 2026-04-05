@@ -1,35 +1,28 @@
 using System;
 using GraphProcessor;
-using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/For")]
-    public class ForNode : CustomBaseNode
+    public class ForNode : BaseExecutionNode
     {
         public override NodeType NodeType => NodeType.FlowFor;
 
-        [Input("execIn")]
-        public object execIn;
-
-        [Input("init")]
+        [Input("init", allowMultiple = false)]
         public object init;
 
-        [Input("condition")]
+        [Input("condition", allowMultiple = false)]
         public bool condition;
 
-        [Input("increment")]
+        [Input("increment", allowMultiple = false)]
         public object increment;
 
-        [Output("body")]
+        [Output("body", allowMultiple = false)]
         public object body;
 
-        [Output("execOut")]
-        public object execOut;
-
-        public override string name => "For";
+        public override string name => "For Loop";
 
         protected override void Process()
         {

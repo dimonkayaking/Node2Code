@@ -19,10 +19,9 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         [Output("Out")]
         public object output;
 
-        public new string variableName = "";
         public string variableType = "object";
 
-        public override string name => $"Declare: {variableName} : {variableType}";
+        public override string name => string.IsNullOrEmpty(variableName) ? $"Declare: {variableType}" : $"Declare: {variableName} : {variableType}";
         
         protected override void Process()
         {
@@ -33,14 +32,12 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableName = data.Value;
             variableType = data.ValueType;
         }
 
         public override NodeData ToNodeData()
         {
             var data = base.ToNodeData();
-            data.Value = variableName;
             data.ValueType = variableType;
             return data;
         }

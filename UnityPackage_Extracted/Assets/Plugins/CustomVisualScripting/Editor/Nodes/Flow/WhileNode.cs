@@ -1,29 +1,22 @@
 using System;
 using GraphProcessor;
-using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/While")]
-    public class WhileNode : CustomBaseNode
+    public class WhileNode : BaseExecutionNode
     {
         public override NodeType NodeType => NodeType.FlowWhile;
 
-        [Input("execIn")]
-        public object execIn;
-
-        [Input("condition")]
+        [Input("condition", allowMultiple = false)]
         public bool condition;
 
-        [Output("body")]
+        [Output("body", allowMultiple = false)]
         public object body;
 
-        [Output("execOut")]
-        public object execOut;
-
-        public override string name => "While";
+        public override string name => "While Loop";
 
         protected override void Process()
         {

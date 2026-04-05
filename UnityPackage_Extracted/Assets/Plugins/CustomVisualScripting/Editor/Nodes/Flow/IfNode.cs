@@ -1,26 +1,25 @@
 using System;
 using GraphProcessor;
-using UnityEngine;
 using VisualScripting.Core.Models;
 using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/If")]
-    public class IfNode : CustomBaseNode
+    public class IfNode : BaseExecutionNode
     {
         public override NodeType NodeType => NodeType.FlowIf;
 
-        [Input("condition")]
+        [Input("condition", allowMultiple = false)]
         public bool condition;
 
-        [Output("true")]
+        [Output("true", allowMultiple = false)]
         public object trueBranch;
 
-        [Output("false")]
+        [Output("false", allowMultiple = false)]
         public object falseBranch;
 
-        public override string name => "If";
+        public override string name => "If Statement";
 
         protected override void Process()
         {

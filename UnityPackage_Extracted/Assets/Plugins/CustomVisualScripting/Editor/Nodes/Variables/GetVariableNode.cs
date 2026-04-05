@@ -16,8 +16,6 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         [Output("Value")]
         public object value;
 
-        public new string variableName = "";
-
         public override string name => $"Get: {variableName}";
         
         protected override void Process()
@@ -30,7 +28,6 @@ namespace CustomVisualScripting.Editor.Nodes.Variables
         public override void InitializeFromData(NodeData data)
         {
             base.InitializeFromData(data);
-            variableName = data.Value;
         }
 
         public override NodeData ToNodeData()

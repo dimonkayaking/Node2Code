@@ -12,7 +12,6 @@ namespace VisualScripting.Core.Parsers
 {
     public class RoslynCodeParser
     {
-        /// <summary>Обёртка: заглушка Mathf + метод; число '\n' до пользовательского кода = смещение строк в диагностиках.</summary>
         private static readonly string WrapPrefix =
             "static class Mathf\n{\n" +
             "    public static float Abs(float x) => x;\n" +
@@ -75,7 +74,6 @@ namespace VisualScripting.Core.Parsers
         private ParseResult Result() =>
             new ParseResult { Graph = _graph, Errors = _errors };
 
-        /// <summary>Строка:колонка относительно исходного кода пользователя (без служебной обёртки).</summary>
         private static string FormatUserLocation(SyntaxTree tree, TextSpan span)
         {
             var pos = tree.GetLineSpan(span);
@@ -160,6 +158,15 @@ namespace VisualScripting.Core.Parsers
                 $"Неподдерживаемая конструкция ({FormatUserLocation(node.SyntaxTree, node.Span)}): {node.Kind()}. Поддерживаются: объявления, присваивания, +=/-=, ++/--, if/else, for/while, вызовы Parse/ToString/Mathf, Console.WriteLine.");
         }
 
+        private bool IsExecutionNode(NodeType type)
+        {
+            return type == NodeType.FlowIf ||
+                   type == NodeType.FlowElse ||
+                   type == NodeType.FlowFor ||
+                   type == NodeType.FlowWhile ||
+                   type == NodeType.ConsoleWriteLine;
+        }
+
         private FlowHost? VisitLocalDeclaration(LocalDeclarationStatementSyntax local, string? prevNode, string prevPort)
         {
             FlowHost? last = null;
@@ -197,10 +204,16 @@ namespace VisualScripting.Core.Parsers
                     _symbolToNodeId[name] = declId;
 
                     var declHost = new FlowHost { NodeId = declId };
-                    if (last != null)
-                        AddEdge(last.NodeId, last.ExecOutPort, declHost.NodeId, "execIn");
-                    else if (prevNode != null)
-                        AddEdge(prevNode, prevPort, declHost.NodeId, "execIn");
+                    
+                    // Только execution-ноды получают exec связи
+                    if (IsExecutionNode(NodeType.VariableDeclaration))
+                    {
+                        if (last != null)
+                            AddEdge(last.NodeId, last.ExecOutPort, declHost.NodeId, "execIn");
+                        else if (prevNode != null)
+                            AddEdge(prevNode, prevPort, declHost.NodeId, "execIn");
+                    }
+                    
                     last = declHost;
                     continue;
                 }
@@ -215,10 +228,16 @@ namespace VisualScripting.Core.Parsers
                 _symbolToNodeId[name] = rootId;
 
                 var host = new FlowHost { NodeId = rootId };
-                if (last != null)
-                    AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, "execIn");
-                else if (prevNode != null)
-                    AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+                
+                // Только execution-ноды получают exec связи
+                var rootNode = _graph.Nodes.FirstOrDefault(n => n.Id == rootId);
+                if (rootNode != null && IsExecutionNode(rootNode.Type))
+                {
+                    if (last != null)
+                        AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, "execIn");
+                    else if (prevNode != null)
+                        AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+                }
 
                 last = host;
             }
@@ -257,8 +276,10 @@ namespace VisualScripting.Core.Parsers
                     _symbolToNodeId[name] = setId;
 
                     var host = new FlowHost { NodeId = setId };
-                    if (prevNode != null)
-                        AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+                    
+                    // VariableSet не execution-нода, поэтому exec связи не добавляем
+                    // if (prevNode != null) - НЕ ДОБАВЛЯЕМ
+                    
                     return host;
                 }
 
@@ -330,10 +351,12 @@ namespace VisualScripting.Core.Parsers
             });
             AddEdge(msgId, GetDataOutPortForNodeId(msgId), nodeId, "message");
 
+            // ConsoleWriteLine - execution-нода, добавляем exec связь
+            var host = new FlowHost { NodeId = nodeId };
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, nodeId, "execIn");
+                AddEdge(prevNode, prevPort, host.NodeId, "execIn");
 
-            return new FlowHost { NodeId = nodeId };
+            return host;
         }
 
         private string CreateLiteralStringNode(string text)
@@ -419,8 +442,7 @@ namespace VisualScripting.Core.Parsers
             _symbolToNodeId[name] = setId;
 
             var host = new FlowHost { NodeId = setId };
-            if (prevNode != null)
-                AddEdge(prevNode, prevPort, setId, "execIn");
+            // VariableSet не execution-нода - exec связи не добавляем
             return host;
         }
 
@@ -465,8 +487,7 @@ namespace VisualScripting.Core.Parsers
             _symbolToNodeId[name] = setId;
 
             var host = new FlowHost { NodeId = setId };
-            if (prevNode != null)
-                AddEdge(prevNode, prevPort, setId, "execIn");
+            // VariableSet не execution-нода - exec связи не добавляем
             return host;
         }
 
@@ -482,6 +503,7 @@ namespace VisualScripting.Core.Parsers
                 VariableName = ""
             });
 
+            // For - execution-нода, добавляем exec связь
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, forId, "execIn");
 
@@ -641,6 +663,7 @@ namespace VisualScripting.Core.Parsers
                 VariableName = ""
             });
 
+            // While - execution-нода, добавляем exec связь
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, whileId, "execIn");
 
@@ -654,9 +677,6 @@ namespace VisualScripting.Core.Parsers
             return new FlowHost { NodeId = whileId, ExecOutPort = "execOut" };
         }
 
-        /// <summary>
-        /// Рекурсивная цепочка if / else if / else.
-        /// </summary>
         private void VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
         {
             var ifNodeId = NewId();
@@ -669,6 +689,7 @@ namespace VisualScripting.Core.Parsers
                 VariableName = ""
             });
 
+            // If - execution-нода, добавляем exec связь
             if (incomingNodeId != null && incomingPort != null)
                 AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
 

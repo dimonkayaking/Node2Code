@@ -1,18 +1,15 @@
 using System;
-using UnityEngine;
 using GraphProcessor;
 
 namespace CustomVisualScripting.Editor.Nodes.Base
 {
-    public struct Flow {}
-
     [Serializable]
-    public abstract class BaseExecutionNode : BaseNode
+    public abstract class BaseExecutionNode : CustomBaseNode
     {
-        [Input("execIn")]
-        public Flow execIn;
+        [Input("execIn", allowMultiple = false)]
+        public object execIn;
 
-        [Output("execOut")]
-        public Flow execOut;
+        [Output("execOut", allowMultiple = false)]
+        public object execOut;
     }
 }

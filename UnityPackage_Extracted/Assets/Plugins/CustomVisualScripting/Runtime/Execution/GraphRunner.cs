@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 using VisualScripting.Core.Models;
 
 namespace CustomVisualScripting.Runtime.Execution
@@ -9,49 +10,128 @@ namespace CustomVisualScripting.Runtime.Execution
     {
         private NodeExecutor _executor = new NodeExecutor();
         private Dictionary<string, object> _context = new Dictionary<string, object>();
+        private Dictionary<string, object> _variables = new Dictionary<string, object>();
+        
+        public event Action<string, LogType> OnLogMessage;
         
         public void Run(GraphData graph)
         {
             if (graph == null || graph.Nodes.Count == 0)
             {
-                UnityEngine.Debug.LogWarning("[GraphRunner] Граф пуст");
+                SendLog("[GraphRunner] Граф пуст", LogType.Warning);
                 return;
             }
             
             try
             {
-                // Определяем порядок выполнения (топологическая сортировка)
-                var executionOrder = GetExecutionOrder(graph);
+                SendLog($"[GraphRunner] Запуск графа: {graph.Nodes.Count} нод, {graph.Edges.Count} связей", LogType.Log);
                 
-                foreach (var nodeId in executionOrder)
+                var hasIncomingExec = new HashSet<string>();
+                foreach (var edge in graph.Edges)
                 {
-                    var node = graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
-                    if (node == null)
-                        continue;
-
-                    // Узлы потока не вычисляют значение; полноценное ветвление — отдельная задача.
-                    if (node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile)
-                        continue;
-
-                    var result = _executor.ExecuteNode(node, _context, graph);
-                    if (result != null)
-                        _context[node.Id] = result;
+                    if (edge.ToPort == "execIn")
+                        hasIncomingExec.Add(edge.ToNodeId);
                 }
                 
-                // Выводим результат последнего узла
-                if (_context.Count > 0)
+                var startNodes = graph.Nodes
+                    .Where(n => !hasIncomingExec.Contains(n.Id) && IsFlowNode(n.Type))
+                    .ToList();
+                
+                if (startNodes.Count == 0)
                 {
-                    var lastResult = _context.Last();
-                    UnityEngine.Debug.Log($"[GraphRunner] Результат: {lastResult.Value}");
+                    ExecuteDataOnly(graph);
+                    return;
                 }
+                
+                foreach (var startNode in startNodes)
+                {
+                    ExecuteFlow(startNode.Id, graph);
+                }
+                
+                SendLog("[GraphRunner] Выполнение завершено", LogType.Log);
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError($"[GraphRunner] Ошибка выполнения: {ex.Message}");
+                SendLog($"[GraphRunner] Ошибка: {ex.Message}", LogType.Error);
             }
         }
         
-        private List<string> GetExecutionOrder(GraphData graph)
+        private void ExecuteFlow(string nodeId, GraphData graph, string fromPort = null)
+        {
+            var node = graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (node == null) return;
+            
+            SendLog($"[Flow] Выполнение: {node.Type}", LogType.Log);
+            
+            var inputs = GetInputValues(node, graph);
+            var result = _executor.ExecuteNode(node, inputs, _variables);
+            if (result != null)
+            {
+                _context[nodeId] = result;
+            }
+            
+            string nextPort = GetNextPort(node, result);
+            
+            var nextEdge = graph.Edges.FirstOrDefault(e => e.FromNodeId == nodeId && e.FromPort == nextPort);
+            if (nextEdge != null)
+            {
+                ExecuteFlow(nextEdge.ToNodeId, graph);
+            }
+        }
+        
+        private Dictionary<string, object> GetInputValues(NodeData node, GraphData graph)
+        {
+            var inputs = new Dictionary<string, object>();
+            
+            foreach (var edge in graph.Edges.Where(e => e.ToNodeId == node.Id))
+            {
+                if (_context.TryGetValue(edge.FromNodeId, out var value))
+                {
+                    inputs[edge.ToPort] = value;
+                }
+            }
+            
+            return inputs;
+        }
+        
+        private string GetNextPort(NodeData node, object result)
+        {
+            return node.Type switch
+            {
+                NodeType.FlowIf => (result is bool b && b) ? "true" : "false",
+                NodeType.FlowFor => "body",
+                NodeType.FlowWhile => "body",
+                NodeType.ConsoleWriteLine => "execOut",
+                _ => "execOut"
+            };
+        }
+        
+        private bool IsFlowNode(NodeType type)
+        {
+            return type is NodeType.FlowIf or NodeType.FlowFor or NodeType.FlowWhile or NodeType.ConsoleWriteLine;
+        }
+        
+        private void ExecuteDataOnly(GraphData graph)
+        {
+            var order = GetTopologicalOrder(graph);
+            
+            foreach (var nodeId in order)
+            {
+                var node = graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+                if (node == null) continue;
+                
+                if (IsFlowNode(node.Type)) continue;
+                
+                var inputs = GetInputValues(node, graph);
+                var result = _executor.ExecuteNode(node, inputs, _variables);
+                if (result != null)
+                {
+                    _context[nodeId] = result;
+                }
+            }
+        }
+        
+        private List<string> GetTopologicalOrder(GraphData graph)
         {
             var order = new List<string>();
             var visited = new HashSet<string>();
@@ -69,7 +149,6 @@ namespace CustomVisualScripting.Runtime.Execution
             if (visited.Contains(nodeId)) return;
             visited.Add(nodeId);
             
-            // Находим входные узлы (те, от которых зависит текущий)
             var inputs = graph.Edges.Where(e => e.ToNodeId == nodeId).Select(e => e.FromNodeId);
             foreach (var inputId in inputs)
             {
@@ -79,19 +158,28 @@ namespace CustomVisualScripting.Runtime.Execution
             order.Add(nodeId);
         }
         
+        private void SendLog(string message, LogType type)
+        {
+            Debug.Log($"[VS] {message}");
+            OnLogMessage?.Invoke(message, type);
+        }
+        
         public void SetVariable(string name, object value)
         {
+            _variables[name] = value;
             _executor.SetVariable(name, value);
         }
         
         public object GetVariable(string name)
         {
-            return _executor.GetVariable(name);
+            return _variables.TryGetValue(name, out var v) ? v : null;
         }
         
         public void Clear()
         {
             _context.Clear();
+            _variables.Clear();
+            _executor.Clear();
         }
     }
 }

@@ -7,7 +7,7 @@ using VisualScripting.Core.Models;
 namespace CustomVisualScripting.Editor.Nodes.Base
 {
     [Serializable]
-    public abstract class CustomBaseNode : GraphProcessor.BaseNode
+    public abstract class CustomBaseNode : BaseNode
     {
         [HideInInspector]
         public string NodeId;
