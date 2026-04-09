@@ -1,4 +1,4 @@
-.course-page {
+﻿.course-page {
   max-width: 1240px;
   margin: 90px auto 40px;
   padding: 0 1rem;
@@ -187,5 +187,39 @@ body.dark .progress-line {
   .course-summary-grid,
   .topic-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.course-page,
+.course-hero,
+.course-summary-card,
+.topic-card,
+.topic-card__top,
+.progress-wrap {
+  min-width: 0;
+}
+
+.course-hero h1,
+.course-hero p,
+.course-summary-card h2,
+.course-summary-card p,
+.topic-card h3,
+.topic-goal,
+.topic-meta,
+.topic-preview-list li,
+.topic-btn {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .topic-card__top,
+  .progress-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .topic-btn {
+    width: 100%;
   }
 }

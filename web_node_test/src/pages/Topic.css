@@ -1,4 +1,4 @@
-.topic-page {
+﻿.topic-page {
   max-width: 1240px;
   margin: 90px auto 40px;
   padding: 0 1rem;
@@ -220,5 +220,35 @@ body.dark .practice-type--free {
   .topic-hero,
   .lesson-row {
     grid-template-columns: 1fr;
+  }
+}
+
+.topic-hero,
+.topic-side-card,
+.topic-block,
+.lesson-row,
+.lesson-body,
+.lesson-tags,
+.practice-card {
+  min-width: 0;
+}
+
+.topic-hero h1,
+.topic-hero p,
+.lesson-name,
+.lesson-body p,
+.practice-card p,
+.lesson-tags span,
+.practice-type,
+.watch-btn,
+.back-topic {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .watch-btn {
+    width: 100%;
+    justify-content: center;
   }
 }

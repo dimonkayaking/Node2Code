@@ -1,4 +1,4 @@
-.lesson-page {
+﻿.lesson-page {
   min-height: 100vh;
   background: transparent;
 }
@@ -316,6 +316,54 @@ body.dark .task-status {
 
   .lesson-header__meta,
   .task-switcher {
+    width: 100%;
+  }
+}
+
+.lesson-container,
+.lesson-content,
+.lesson-task-area,
+.lesson-note,
+.lesson-header,
+.lesson-header__meta,
+.task-box,
+.code-controls,
+.task-switcher {
+  min-width: 0;
+}
+
+.lesson-header h1,
+.lesson-subtitle,
+.lesson-text p,
+.compact-points li,
+.module-practice-inline li,
+.task-box p,
+.task-box h2,
+.theme-tag,
+.format-tag,
+.check-button,
+.next-lesson-btn {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.code-controls {
+  flex-wrap: wrap;
+}
+
+.check-button,
+.next-lesson-btn {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .code-controls {
+    flex-direction: column;
+  }
+
+  .check-button,
+  .next-lesson-btn,
+  .task-switcher button {
     width: 100%;
   }
 }

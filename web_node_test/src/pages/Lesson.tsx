@@ -15,6 +15,7 @@ const Lesson: React.FC = () => {
   const [taskStatus, setTaskStatus] = useState('');
   const [taskSolved, setTaskSolved] = useState(false);
   const [activeTab, setActiveTab] = useState<'theory' | 'task'>('theory');
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
 
   const fallbackModule = courseModules[0];
   const fallbackLesson = fallbackModule.lessons[0];
@@ -45,15 +46,20 @@ const Lesson: React.FC = () => {
     setTaskSolved(true);
   };
 
-  const goToNextLesson = () => {
-    markLessonCompleted(lesson.id);
+  const goToNextLesson = async () => {
+    setIsSavingProgress(true);
+    try {
+      await markLessonCompleted(lesson.id);
 
-    if (nextLessonId) {
-      navigate(`/lesson/${nextLessonId}`);
-      return;
+      if (nextLessonId) {
+        navigate(`/lesson/${nextLessonId}`);
+        return;
+      }
+
+      navigate('/course');
+    } finally {
+      setIsSavingProgress(false);
     }
-
-    navigate('/course');
   };
 
   return (
@@ -113,8 +119,8 @@ const Lesson: React.FC = () => {
           </div>
 
           {lesson.format === 'theory' && (
-            <button className="next-lesson-btn" onClick={goToNextLesson}>
-              {nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
+            <button className="next-lesson-btn" onClick={() => void goToNextLesson()} disabled={isSavingProgress}>
+              {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
             </button>
           )}
         </div>
@@ -152,8 +158,8 @@ const Lesson: React.FC = () => {
                 {taskStatus && <p className="task-status">{taskStatus}</p>}
 
                 {taskSolved && (
-                  <button className="next-lesson-btn" onClick={goToNextLesson}>
-                    {nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
+                  <button className="next-lesson-btn" onClick={() => void goToNextLesson()} disabled={isSavingProgress}>
+                    {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
                   </button>
                 )}
               </div>
