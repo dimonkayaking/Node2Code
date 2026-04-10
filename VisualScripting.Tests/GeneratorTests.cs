@@ -111,7 +111,7 @@ else
         var output = Roundtrip(code);
         Assert.Contains("int x = 10;", output);
         Assert.Contains("int y = 20;", output);
-        Assert.Contains("int z;", output);
+        Assert.Contains("int z = 0;", output);
         Assert.Contains("if (x > y)", output);
         Assert.Contains("z = x;", output);
         Assert.Contains("else if (x == y)", output);
@@ -157,24 +157,24 @@ else
 
         var declNode = result.Graph.Nodes.FirstOrDefault(n => n.VariableName == "x");
         Assert.NotNull(declNode);
-        Assert.Equal(NodeType.VariableDeclaration, declNode.Type);
+        Assert.Equal(NodeType.LiteralInt, declNode.Type);
         Assert.Equal("int", declNode.ValueType);
 
         var output = _generator.Generate(result.Graph);
-        Assert.Contains("int x;", output);
+        Assert.Contains("int x = 0;", output);
         Assert.Contains("int y = 10;", output);
     }
 
     [Fact]
-    public void AssignmentCreatesVariableSetNode()
+    public void AssignmentCreatesLiteralNode()
     {
         var code = "int x = 10;\nx = 20;";
         var result = _parser.Parse(code);
         Assert.False(result.HasErrors, string.Join("\n", result.Errors));
 
-        var setNode = result.Graph.Nodes.FirstOrDefault(n => n.Type == NodeType.VariableSet);
-        Assert.NotNull(setNode);
-        Assert.Equal("x", setNode.VariableName);
+        var setNodes = result.Graph.Nodes.Where(n => n.VariableName == "x").ToList();
+        Assert.Equal(2, setNodes.Count);
+        Assert.Equal(NodeType.LiteralInt, setNodes[1].Type);
     }
 
     [Fact]
@@ -340,5 +340,224 @@ float w = Mathf.Min(x, y);";
         Assert.Contains("Math.Abs", output);
         Assert.Contains("Math.Max", output);
         Assert.Contains("Math.Min", output);
+    }
+
+    [Fact]
+    public void VariableReassignment()
+    {
+        var code = "int x = 10;\nx = 20;";
+        var output = Roundtrip(code);
+        Assert.Contains("int x = 10;", output);
+        Assert.Contains("x = 20;", output);
+    }
+
+    [Fact]
+    public void VariableReassignmentWithExpression()
+    {
+        var code = "int x = 10;\nint y = 5;\nx = x + y;";
+        var output = Roundtrip(code);
+        Assert.Contains("int x = 10;", output);
+        Assert.Contains("int y = 5;", output);
+        Assert.Contains("x = x + y;", output);
+    }
+
+    [Fact]
+    public void FloatVariableRoundtrip()
+    {
+        var code = "float speed = 5.5f;";
+        var output = Roundtrip(code);
+        Assert.Contains("float speed = 5.5f;", output);
+    }
+
+    [Fact]
+    public void FloatArithmeticRoundtrip()
+    {
+        var code = "float a = 1.5f;\nfloat b = 2.5f;\nfloat c = a + b;";
+        var output = Roundtrip(code);
+        Assert.Contains("float a = 1.5f;", output);
+        Assert.Contains("float b = 2.5f;", output);
+        Assert.Contains("float c = a + b;", output);
+    }
+
+    [Fact]
+    public void IfWithVariableAssignmentInBranch()
+    {
+        var code = @"
+int score = 75;
+string grade = """";
+if (score >= 90)
+{
+    grade = ""A"";
+}";
+        var output = Roundtrip(code);
+        Assert.Contains("int score = 75;", output);
+        Assert.Contains("if (score >= 90)", output);
+        Assert.Contains("grade = \"A\";", output);
+    }
+
+    [Fact]
+    public void IfElseIfElseChain()
+    {
+        var code = @"
+int score = 75;
+string grade = """";
+if (score >= 90)
+{
+    grade = ""A"";
+}
+else if (score >= 80)
+{
+    grade = ""B"";
+}
+else
+{
+    grade = ""F"";
+}";
+        var output = Roundtrip(code);
+        Assert.Contains("if (score >= 90)", output);
+        Assert.Contains("grade = \"A\";", output);
+        Assert.Contains("else if (score >= 80)", output);
+        Assert.Contains("grade = \"B\";", output);
+        Assert.Contains("else", output);
+        Assert.Contains("grade = \"F\";", output);
+    }
+
+    [Fact]
+    public void ConsoleWriteLineWithVariable()
+    {
+        var code = @"
+string message = ""Hello World"";
+Console.WriteLine(message);";
+        var output = Roundtrip(code);
+        Assert.Contains("string message = \"Hello World\";", output);
+        Assert.Contains("Console.WriteLine(message);", output);
+    }
+
+    [Fact]
+    public void MultipleConsoleWriteLines()
+    {
+        var code = @"
+Console.WriteLine(""First"");
+Console.WriteLine(""Second"");";
+        var output = Roundtrip(code);
+        Assert.Contains("Console.WriteLine(\"First\");", output);
+        Assert.Contains("Console.WriteLine(\"Second\");", output);
+    }
+
+    [Fact]
+    public void ForLoopSimple()
+    {
+        var code = @"
+int sum = 0;
+for (int i = 0; i < 5; i++)
+{
+    sum += i;
+}";
+        var output = Roundtrip(code);
+        Assert.Contains("for (int i = 0; i < 5; i++)", output);
+        Assert.Contains("sum = sum + i;", output);
+    }
+
+    [Fact]
+    public void WhileLoopWithDecrement()
+    {
+        var code = @"
+int count = 10;
+while (count > 0)
+{
+    count--;
+}";
+        var output = Roundtrip(code);
+        Assert.Contains("while (count > 0)", output);
+        Assert.Contains("count = count - 1;", output);
+    }
+
+    [Fact]
+    public void ParserCreatesExecFlowEdges()
+    {
+        var code = @"
+int x = 10;
+int y = 20;";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var execEdges = result.Graph.Edges.Where(e => e.ToPort == "execIn" || e.FromPort == "execOut").ToList();
+        Assert.True(execEdges.Count > 0, "Parser should create execution flow edges between statements");
+    }
+
+    [Fact]
+    public void ParserIfCreatesSubGraphs()
+    {
+        var code = @"
+int x = 10;
+if (x > 5)
+{
+    x = 0;
+}";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var ifNode = result.Graph.Nodes.FirstOrDefault(n => n.Type == NodeType.FlowIf);
+        Assert.NotNull(ifNode);
+
+        Assert.NotNull(ifNode.ConditionSubGraph);
+        Assert.True(ifNode.ConditionSubGraph.Nodes.Count > 0, "Condition sub-graph should have nodes");
+
+        Assert.NotNull(ifNode.BodySubGraph);
+        Assert.True(ifNode.BodySubGraph.Nodes.Count > 0, "Body sub-graph should have nodes");
+    }
+
+    [Fact]
+    public void ParserIfElseCreatesLadder()
+    {
+        var code = @"
+int x = 10;
+if (x > 20)
+{
+    x = 1;
+}
+else
+{
+    x = 2;
+}";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var ifNode = result.Graph.Nodes.FirstOrDefault(n => n.Type == NodeType.FlowIf);
+        Assert.NotNull(ifNode);
+        var elseNode = result.Graph.Nodes.FirstOrDefault(n => n.Type == NodeType.FlowElse);
+        Assert.NotNull(elseNode);
+
+        var falseEdge = result.Graph.Edges.FirstOrDefault(
+            e => e.FromNodeId == ifNode.Id && e.FromPort == "false" && e.ToNodeId == elseNode.Id);
+        Assert.NotNull(falseEdge);
+
+        Assert.NotNull(elseNode.BodySubGraph);
+        Assert.True(elseNode.BodySubGraph.Nodes.Count > 0, "Else body sub-graph should have nodes");
+    }
+
+    [Fact]
+    public void LiteralNodeActsAsAssignment()
+    {
+        var code = "int x = 10;\nx = 20;";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var nodesWithX = result.Graph.Nodes.Where(n => n.VariableName == "x").ToList();
+        Assert.True(nodesWithX.Count >= 2);
+    }
+
+    [Fact]
+    public void ConsoleWriteLineNodeCreated()
+    {
+        var code = @"Console.WriteLine(""Test"");";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var cwlNode = result.Graph.Nodes.FirstOrDefault(n => n.Type == NodeType.ConsoleWriteLine);
+        Assert.NotNull(cwlNode);
+
+        var msgEdge = result.Graph.Edges.FirstOrDefault(e => e.ToNodeId == cwlNode.Id && e.ToPort == "message");
+        Assert.NotNull(msgEdge);
     }
 }

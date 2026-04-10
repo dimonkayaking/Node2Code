@@ -17,6 +17,7 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         [Output("output")]
         public int output;
 
+        [HideInInspector]
         public int intValue = 0;
 
         public override string name => string.IsNullOrEmpty(variableName) ? $"Int: {intValue}" : $"{variableName} = {intValue}";

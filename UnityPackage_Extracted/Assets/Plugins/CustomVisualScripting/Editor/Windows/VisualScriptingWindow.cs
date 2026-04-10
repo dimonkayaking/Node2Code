@@ -317,11 +317,21 @@ namespace CustomVisualScripting.Editor.Windows
                     if (customNode is IntNode intNode)
                         nodeData.Value = intNode.intValue.ToString();
                     else if (customNode is FloatNode floatNode)
-                        nodeData.Value = floatNode.floatValue.ToString();
+                        nodeData.Value = floatNode.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     else if (customNode is BoolNode boolNode)
                         nodeData.Value = boolNode.boolValue.ToString();
                     else if (customNode is StringNode stringNode)
                         nodeData.Value = stringNode.stringValue;
+
+                    if (customNode is IfNode ifNode)
+                    {
+                        nodeData.ConditionSubGraph = ifNode.conditionSubGraph;
+                        nodeData.BodySubGraph = ifNode.bodySubGraph;
+                    }
+                    else if (customNode is ElseNode elseNode)
+                    {
+                        nodeData.BodySubGraph = elseNode.bodySubGraph;
+                    }
                     
                     _currentGraph.LogicGraph.Nodes.Add(nodeData);
                 }
@@ -398,12 +408,22 @@ namespace CustomVisualScripting.Editor.Windows
                             
                             if (node is IntNode intNode && int.TryParse(nodeData.Value, out int intVal))
                                 intNode.intValue = intVal;
-                            else if (node is FloatNode floatNode && float.TryParse(nodeData.Value, out float floatVal))
+                            else if (node is FloatNode floatNode && float.TryParse(nodeData.Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float floatVal))
                                 floatNode.floatValue = floatVal;
                             else if (node is BoolNode boolNode && bool.TryParse(nodeData.Value, out bool boolVal))
                                 boolNode.boolValue = boolVal;
                             else if (node is StringNode stringNode)
                                 stringNode.stringValue = nodeData.Value;
+
+                            if (node is IfNode ifNode)
+                            {
+                                ifNode.conditionSubGraph = nodeData.ConditionSubGraph ?? new VisualScripting.Core.Models.GraphData();
+                                ifNode.bodySubGraph = nodeData.BodySubGraph ?? new VisualScripting.Core.Models.GraphData();
+                            }
+                            else if (node is ElseNode elseNode)
+                            {
+                                elseNode.bodySubGraph = nodeData.BodySubGraph ?? new VisualScripting.Core.Models.GraphData();
+                            }
                             
                             _internalGraph.AddNode(node);
                             nodeMap[nodeData.Id] = node;
@@ -419,11 +439,7 @@ namespace CustomVisualScripting.Editor.Windows
                 {
                     foreach (var edgeData in _currentGraph.LogicGraph.Edges)
                     {
-                        if (edgeData.FromPort == "execOut" || edgeData.FromPort == "execIn" ||
-                            edgeData.ToPort == "execOut" || edgeData.ToPort == "execIn")
-                        {
-                            continue;
-                        }
+                        // Removing execution port filter
                         
                         if (!nodeMap.TryGetValue(edgeData.FromNodeId, out var fromNode)) continue;
                         if (!nodeMap.TryGetValue(edgeData.ToNodeId, out var toNode)) continue;
@@ -535,6 +551,7 @@ namespace CustomVisualScripting.Editor.Windows
                 case NodeType.LogicalOr: return new OrNode();
                 case NodeType.LogicalNot: return new NotNode();
                 case NodeType.FlowIf: return new IfNode();
+                case NodeType.FlowElse: return new ElseNode();
                 case NodeType.FlowFor: return new ForNode();
                 case NodeType.FlowWhile: return new WhileNode();
                 case NodeType.ConsoleWriteLine: return new ConsoleWriteLineNode();

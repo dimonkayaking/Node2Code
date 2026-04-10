@@ -27,6 +27,12 @@ namespace VisualScripting.Core.Parsers
         private GraphData _graph = null!;
         private List<string> _errors = null!;
         private readonly Dictionary<string, string> _symbolToNodeId = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _variableTypes = new Dictionary<string, string>();
+
+        private bool _inSubGraph;
+        private readonly Stack<GraphData> _graphStack = new Stack<GraphData>();
+        private readonly Stack<Dictionary<string, string>?> _varRefStack = new Stack<Dictionary<string, string>?>();
+        private Dictionary<string, string>? _subGraphVarRefs;
 
         public ParseResult Parse(string code)
         {
@@ -34,6 +40,11 @@ namespace VisualScripting.Core.Parsers
             _graph = new GraphData();
             _errors = new List<string>();
             _symbolToNodeId.Clear();
+            _variableTypes.Clear();
+            _inSubGraph = false;
+            _graphStack.Clear();
+            _varRefStack.Clear();
+            _subGraphVarRefs = null;
 
             if (string.IsNullOrWhiteSpace(code))
             {
@@ -95,9 +106,17 @@ namespace VisualScripting.Core.Parsers
             {
                 if (stmt is IfStatementSyntax ifStmt)
                 {
-                    VisitIfChain(ifStmt, prevFlowNode, prevFlowPort);
-                    prevFlowNode = null;
-                    prevFlowPort = "execOut";
+                    var ifHost = VisitIfChain(ifStmt, prevFlowNode, prevFlowPort);
+                    if (ifHost != null)
+                    {
+                        prevFlowNode = ifHost.NodeId;
+                        prevFlowPort = ifHost.ExecOutPort;
+                    }
+                    else
+                    {
+                        prevFlowNode = null;
+                        prevFlowPort = "execOut";
+                    }
                 }
                 else if (stmt is ForStatementSyntax forStmt)
                 {
@@ -159,6 +178,29 @@ namespace VisualScripting.Core.Parsers
                 $"Неподдерживаемая конструкция ({FormatUserLocation(node.SyntaxTree, node.Span)}): {node.Kind()}. Поддерживаются: объявления, присваивания, +=/-=, ++/--, if/else, for/while, вызовы Parse/ToString/Mathf, Console.WriteLine.");
         }
 
+        private string CreateDefaultLiteralNode(string typeStr, string variableName)
+        {
+            NodeType type;
+            string value;
+            switch (typeStr)
+            {
+                case "float": type = NodeType.LiteralFloat; value = "0"; break;
+                case "bool": type = NodeType.LiteralBool; value = "false"; break;
+                case "string": type = NodeType.LiteralString; value = ""; break;
+                default: type = NodeType.LiteralInt; value = "0"; break;
+            }
+            var id = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = type,
+                Value = value,
+                ValueType = typeStr,
+                VariableName = variableName
+            });
+            return id;
+        }
+
         private FlowHost? VisitLocalDeclaration(LocalDeclarationStatementSyntax local, string? prevNode, string prevPort)
         {
             FlowHost? last = null;
@@ -173,26 +215,19 @@ namespace VisualScripting.Core.Parsers
                     continue;
                 }
 
+                var typeStr = local.Declaration.Type.ToString().Trim();
+                var vType = typeStr switch
+                {
+                    "float" => "float",
+                    "bool" => "bool",
+                    "string" => "string",
+                    _ => "int"
+                };
+                _variableTypes[name] = vType;
+
                 if (v.Initializer == null)
                 {
-                    var typeStr = local.Declaration.Type.ToString().Trim();
-                    var vType = typeStr switch
-                    {
-                        "float" => "float",
-                        "bool" => "bool",
-                        "string" => "string",
-                        _ => "int"
-                    };
-
-                    var declId = NewId();
-                    _graph.Nodes.Add(new NodeData
-                    {
-                        Id = declId,
-                        Type = NodeType.VariableDeclaration,
-                        Value = "",
-                        ValueType = vType,
-                        VariableName = name
-                    });
+                    var declId = CreateDefaultLiteralNode(vType, name);
                     _symbolToNodeId[name] = declId;
 
                     var declHost = new FlowHost { NodeId = declId };
@@ -211,9 +246,21 @@ namespace VisualScripting.Core.Parsers
                 if (rootId == null)
                     continue;
 
-                _symbolToNodeId[name] = rootId;
+                var rootNode = _graph.Nodes.FirstOrDefault(n => n.Id == rootId);
+                string litId;
+                if (rootNode != null && rootNode.VariableName == name)
+                {
+                    litId = rootId;
+                }
+                else
+                {
+                    litId = CreateDefaultLiteralNode(vType, name);
+                    AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
+                }
 
-                var host = new FlowHost { NodeId = rootId };
+                _symbolToNodeId[name] = litId;
+
+                var host = new FlowHost { NodeId = litId };
                 if (last != null)
                     AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, "execIn");
                 else if (prevNode != null)
@@ -238,24 +285,26 @@ namespace VisualScripting.Core.Parsers
                 {
                     var idLeft = (IdentifierNameSyntax)assign.Left;
                     var name = idLeft.Identifier.Text;
-                    var rootId = VisitExpression(assign.Right, false, null, out var unsupported);
+                    var rootId = VisitExpression(assign.Right, true, name, out var unsupported);
                     if (unsupported || rootId == null)
                         return null;
 
-                    var setId = NewId();
-                    _graph.Nodes.Add(new NodeData
+                    var rootNode = _graph.Nodes.FirstOrDefault(n => n.Id == rootId);
+                    string litId;
+                    if (rootNode != null && rootNode.VariableName == name)
                     {
-                        Id = setId,
-                        Type = NodeType.VariableSet,
-                        Value = "",
-                        ValueType = "",
-                        VariableName = name
-                    });
-                    AddEdge(rootId, GetDataOutPortForNodeId(rootId), setId, "value");
+                        litId = rootId;
+                    }
+                    else
+                    {
+                        var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+                        litId = CreateDefaultLiteralNode(vType, name);
+                        AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
+                    }
 
-                    _symbolToNodeId[name] = setId;
+                    _symbolToNodeId[name] = litId;
 
-                    var host = new FlowHost { NodeId = setId };
+                    var host = new FlowHost { NodeId = litId };
                     if (prevNode != null)
                         AddEdge(prevNode, prevPort, host.NodeId, "execIn");
                     return host;
@@ -405,21 +454,15 @@ namespace VisualScripting.Core.Parsers
             AddEdge(leftId, GetDataOutPortForNodeId(leftId), opId, "inputA");
             AddEdge(rightId, GetDataOutPortForNodeId(rightId), opId, "inputB");
 
-            var setId = NewId();
-            _graph.Nodes.Add(new NodeData
-            {
-                Id = setId,
-                Type = NodeType.VariableSet,
-                Value = "",
-                ValueType = "",
-                VariableName = name
-            });
-            AddEdge(opId, "output", setId, "value");
-            _symbolToNodeId[name] = setId;
+            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var litId = CreateDefaultLiteralNode(vType, name);
+            
+            AddEdge(opId, "output", litId, "inputValue");
+            _symbolToNodeId[name] = litId;
 
-            var host = new FlowHost { NodeId = setId };
+            var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, setId, "execIn");
+                AddEdge(prevNode, prevPort, litId, "execIn");
             return host;
         }
 
@@ -451,21 +494,15 @@ namespace VisualScripting.Core.Parsers
             AddEdge(varNodeId, GetDataOutPortForNodeId(varNodeId), opId, "inputA");
             AddEdge(oneId, "output", opId, "inputB");
 
-            var setId = NewId();
-            _graph.Nodes.Add(new NodeData
-            {
-                Id = setId,
-                Type = NodeType.VariableSet,
-                Value = "",
-                ValueType = "",
-                VariableName = name
-            });
-            AddEdge(opId, "output", setId, "value");
-            _symbolToNodeId[name] = setId;
+            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var litId = CreateDefaultLiteralNode(vType, name);
+            
+            AddEdge(opId, "output", litId, "inputValue");
+            _symbolToNodeId[name] = litId;
 
-            var host = new FlowHost { NodeId = setId };
+            var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, setId, "execIn");
+                AddEdge(prevNode, prevPort, litId, "execIn");
             return host;
         }
 
@@ -539,22 +576,25 @@ namespace VisualScripting.Core.Parsers
                     ae.Left is IdentifierNameSyntax idLeft)
                 {
                     var n = idLeft.Identifier.Text;
-                    var rootId = VisitExpression(ae.Right, false, null, out var unsupported);
+                    var rootId = VisitExpression(ae.Right, true, n, out var unsupported);
                     if (unsupported || rootId == null)
                         continue;
 
-                    var setId = NewId();
-                    _graph.Nodes.Add(new NodeData
+                    var rootNode = _graph.Nodes.FirstOrDefault(node => node.Id == rootId);
+                    string litId;
+                    if (rootNode != null && rootNode.VariableName == n)
                     {
-                        Id = setId,
-                        Type = NodeType.VariableSet,
-                        Value = "",
-                        ValueType = "",
-                        VariableName = n
-                    });
-                    AddEdge(rootId, GetDataOutPortForNodeId(rootId), setId, "value");
-                    _symbolToNodeId[n] = setId;
-                    AddEdge(rootId, GetDataOutPortForNodeId(rootId), forId, "init");
+                        litId = rootId;
+                    }
+                    else
+                    {
+                        var vType = _variableTypes.TryGetValue(n, out var t) ? t : "int";
+                        litId = CreateDefaultLiteralNode(vType, n);
+                        AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
+                    }
+                    
+                    _symbolToNodeId[n] = litId;
+                    AddEdge(litId, GetDataOutPortForNodeId(litId), forId, "init");
                     continue;
                 }
 
@@ -613,17 +653,11 @@ namespace VisualScripting.Core.Parsers
             AddEdge(varNodeId, GetDataOutPortForNodeId(varNodeId), opId, "inputA");
             AddEdge(oneId, "output", opId, "inputB");
 
-            var setId = NewId();
-            _graph.Nodes.Add(new NodeData
-            {
-                Id = setId,
-                Type = NodeType.VariableSet,
-                Value = "",
-                ValueType = "",
-                VariableName = name
-            });
-            AddEdge(opId, "output", setId, "value");
-            _symbolToNodeId[name] = setId;
+            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var litId = CreateDefaultLiteralNode(vType, name);
+            
+            AddEdge(opId, "output", litId, "inputValue");
+            _symbolToNodeId[name] = litId;
 
             return opId;
         }
@@ -653,53 +687,160 @@ namespace VisualScripting.Core.Parsers
             return new FlowHost { NodeId = whileId, ExecOutPort = "execOut" };
         }
 
-        /// <summary>
-        /// Рекурсивная цепочка if / else if / else.
-        /// </summary>
-        private void VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
+        private FlowHost? VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
         {
             var ifNodeId = NewId();
-            _graph.Nodes.Add(new NodeData
+            var ifNodeData = new NodeData
             {
                 Id = ifNodeId,
                 Type = NodeType.FlowIf,
                 Value = "",
                 ValueType = "",
                 VariableName = ""
-            });
+            };
+
+            var condGraph = new GraphData();
+            PushSubGraph(condGraph);
+            VisitExpression(stmt.Condition, false, null, out _);
+            PopSubGraph();
+            ifNodeData.ConditionSubGraph = condGraph;
+
+            var bodyGraph = new GraphData();
+            PushSubGraph(bodyGraph);
+            var thenStmts = ExpandStatement(stmt.Statement);
+            BuildStatementsInSubGraph(thenStmts);
+            PopSubGraph();
+            ifNodeData.BodySubGraph = bodyGraph;
+
+            _graph.Nodes.Add(ifNodeData);
 
             if (incomingNodeId != null && incomingPort != null)
                 AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
 
-            var condRoot = VisitExpression(stmt.Condition, false, null, out var badCond);
-            if (!badCond && condRoot != null)
-                AddEdge(condRoot, GetDataOutPortForNodeId(condRoot), ifNodeId, "condition");
-
-            var thenStmts = ExpandStatement(stmt.Statement);
-            ProcessBlockStatements(thenStmts, ifNodeId, "true");
-
-            if (stmt.Else == null)
-                return;
-
-            if (stmt.Else.Statement is IfStatementSyntax elseIf)
+            if (stmt.Else != null)
             {
-                VisitIfChain(elseIf, ifNodeId, "false");
-            }
-            else
-            {
-                var elseNodeId = NewId();
-                _graph.Nodes.Add(new NodeData
+                if (stmt.Else.Statement is IfStatementSyntax elseIf)
                 {
-                    Id = elseNodeId,
-                    Type = NodeType.FlowElse,
-                    Value = "",
-                    ValueType = "",
-                    VariableName = ""
-                });
-                AddEdge(ifNodeId, "false", elseNodeId, "execIn");
-                var elseStmts = ExpandStatement(stmt.Else.Statement);
-                ProcessBlockStatements(elseStmts, elseNodeId, "execOut");
+                    VisitIfChain(elseIf, ifNodeId, "false");
+                }
+                else
+                {
+                    var elseNodeId = NewId();
+                    var elseNodeData = new NodeData
+                    {
+                        Id = elseNodeId,
+                        Type = NodeType.FlowElse,
+                        Value = "",
+                        ValueType = "",
+                        VariableName = ""
+                    };
+
+                    var elseBodyGraph = new GraphData();
+                    PushSubGraph(elseBodyGraph);
+                    var elseStmts = ExpandStatement(stmt.Else.Statement);
+                    BuildStatementsInSubGraph(elseStmts);
+                    PopSubGraph();
+                    elseNodeData.BodySubGraph = elseBodyGraph;
+
+                    _graph.Nodes.Add(elseNodeData);
+                    AddEdge(ifNodeId, "false", elseNodeId, "execIn");
+                }
             }
+
+            return new FlowHost { NodeId = ifNodeId, ExecOutPort = "execOut" };
+        }
+
+        private void PushSubGraph(GraphData target)
+        {
+            _graphStack.Push(_graph);
+            _varRefStack.Push(_subGraphVarRefs);
+            _graph = target;
+            _inSubGraph = true;
+            _subGraphVarRefs = new Dictionary<string, string>();
+        }
+
+        private void PopSubGraph()
+        {
+            _graph = _graphStack.Pop();
+            _subGraphVarRefs = _varRefStack.Pop();
+            _inSubGraph = _graphStack.Count > 0;
+        }
+
+        private void BuildStatementsInSubGraph(IReadOnlyList<StatementSyntax> statements)
+        {
+            string? prevId = null;
+            var prevPort = "execOut";
+
+            foreach (var st in statements)
+            {
+                if (st is IfStatementSyntax nestedIf)
+                {
+                    var ifHost = VisitIfChain(nestedIf, prevId, prevPort);
+                    if (ifHost != null)
+                    {
+                        prevId = ifHost.NodeId;
+                        prevPort = ifHost.ExecOutPort;
+                    }
+                    else
+                    {
+                        prevId = null;
+                        prevPort = "execOut";
+                    }
+                    continue;
+                }
+
+                if (st is ForStatementSyntax nestedFor)
+                {
+                    var fh = VisitForStatement(nestedFor, prevId, prevPort);
+                    if (fh != null) { prevId = fh.NodeId; prevPort = fh.ExecOutPort; }
+                    else { prevId = null; prevPort = "execOut"; }
+                    continue;
+                }
+
+                if (st is WhileStatementSyntax nestedWhile)
+                {
+                    var wh = VisitWhileStatement(nestedWhile, prevId, prevPort);
+                    if (wh != null) { prevId = wh.NodeId; prevPort = wh.ExecOutPort; }
+                    else { prevId = null; prevPort = "execOut"; }
+                    continue;
+                }
+
+                var host = VisitStatementForFlow(st, prevId, prevPort);
+                if (host != null)
+                {
+                    prevId = host.NodeId;
+                    prevPort = host.ExecOutPort;
+                }
+            }
+        }
+
+        private string CreateVariableRefInSubGraph(string varName)
+        {
+            if (_subGraphVarRefs != null && _subGraphVarRefs.TryGetValue(varName, out var existing))
+                return existing;
+
+            var vType = _variableTypes.TryGetValue(varName, out var t) ? t : "int";
+            NodeType litType = vType switch
+            {
+                "float" => NodeType.LiteralFloat,
+                "bool" => NodeType.LiteralBool,
+                "string" => NodeType.LiteralString,
+                _ => NodeType.LiteralInt
+            };
+
+            var id = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = litType,
+                Value = "",
+                ValueType = vType,
+                VariableName = varName
+            });
+
+            if (_subGraphVarRefs != null)
+                _subGraphVarRefs[varName] = id;
+            return id;
         }
 
         private static IReadOnlyList<StatementSyntax> ExpandStatement(StatementSyntax statement)
@@ -722,14 +863,21 @@ namespace VisualScripting.Core.Parsers
             {
                 if (st is IfStatementSyntax nestedIf)
                 {
-                    if (first)
-                        VisitIfChain(nestedIf, entryFromNodeId, entryFromPort);
-                    else
-                        VisitIfChain(nestedIf, prevId, prevPort);
+                    var ifHost = first
+                        ? VisitIfChain(nestedIf, entryFromNodeId, entryFromPort)
+                        : VisitIfChain(nestedIf, prevId, prevPort);
 
                     first = false;
-                    prevId = null;
-                    prevPort = "execOut";
+                    if (ifHost != null)
+                    {
+                        prevId = ifHost.NodeId;
+                        prevPort = ifHost.ExecOutPort;
+                    }
+                    else
+                    {
+                        prevId = null;
+                        prevPort = "execOut";
+                    }
                     continue;
                 }
 
@@ -1081,6 +1229,10 @@ namespace VisualScripting.Core.Parsers
         {
             unsupported = false;
             var name = id.Identifier.Text;
+
+            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+                return CreateVariableRefInSubGraph(name);
+
             if (_symbolToNodeId.TryGetValue(name, out var nodeId))
                 return nodeId;
 

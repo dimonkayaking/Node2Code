@@ -14,6 +14,7 @@ namespace CustomVisualScripting.Editor.Nodes.Flow
         [Input("message")]
         public object message;
 
+        [SerializeField]
         public string messageText = "";
 
         public override string name => "Console.WriteLine";

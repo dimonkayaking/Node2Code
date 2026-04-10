@@ -41,7 +41,7 @@ namespace CustomVisualScripting.Runtime.Execution
                     NodeType.FlowIf => GetBool(inputs, "condition"),
                     NodeType.FlowFor => true,
                     NodeType.FlowWhile => GetBool(inputs, "condition"),
-                    NodeType.ConsoleWriteLine => ExecuteConsoleWriteLine(inputs),
+                    NodeType.ConsoleWriteLine => ExecuteConsoleWriteLine(node, inputs),
                     
                     NodeType.IntParse => int.TryParse(GetString(inputs, "input"), out var i) ? i : 0,
                     NodeType.FloatParse => float.TryParse(GetString(inputs, "input"), out var f) ? f : 0f,
@@ -65,9 +65,10 @@ namespace CustomVisualScripting.Runtime.Execution
             }
         }
         
-        private object ExecuteConsoleWriteLine(Dictionary<string, object> inputs)
+        private object ExecuteConsoleWriteLine(NodeData node, Dictionary<string, object> inputs)
         {
-            var msg = GetObject(inputs, "message")?.ToString() ?? "";
+            var msg = GetObject(inputs, "message")?.ToString();
+            if (string.IsNullOrEmpty(msg)) msg = node.Value ?? "";
             UnityEngine.Debug.Log($"[Console] {msg}");
             return null;
         }

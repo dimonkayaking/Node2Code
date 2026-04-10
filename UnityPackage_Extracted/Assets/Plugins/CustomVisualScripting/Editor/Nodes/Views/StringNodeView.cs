@@ -23,21 +23,23 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 mainContainer.Add(controlsContainer);
             }
             
-            var nameField = new TextField("Variable Name");
+            var nameField = new TextField();
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"String: {_node.stringValue}" : $"{_node.variableName}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"String: \"{_node.stringValue}\"" : $"{_node.variableName} = \"{_node.stringValue}\"";
             });
             controlsContainer.Add(nameField);
             
-            var valueField = new TextField("Value");
+            var valueField = new TextField();
             valueField.value = _node.stringValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.stringValue = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"String: {_node.stringValue}" : $"{_node.variableName}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"String: \"{_node.stringValue}\"" : $"{_node.variableName} = \"{_node.stringValue}\"";
             });
             controlsContainer.Add(valueField);
+            
+            title = string.IsNullOrEmpty(_node.variableName) ? $"String: \"{_node.stringValue}\"" : $"{_node.variableName} = \"{_node.stringValue}\"";
         }
     }
 }

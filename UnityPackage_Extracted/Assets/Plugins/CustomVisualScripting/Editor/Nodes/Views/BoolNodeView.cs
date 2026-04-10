@@ -23,7 +23,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 mainContainer.Add(controlsContainer);
             }
             
-            var nameField = new TextField("Variable Name");
+            var nameField = new TextField();
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
@@ -31,13 +31,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             });
             controlsContainer.Add(nameField);
             
-            var valueField = new Toggle("Value");
+            var valueField = new Toggle();
             valueField.value = _node.boolValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.boolValue = evt.newValue;
                 title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"{_node.variableName} = {_node.boolValue}";
             });
             controlsContainer.Add(valueField);
+            
+            title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"{_node.variableName} = {_node.boolValue}";
         }
     }
 }

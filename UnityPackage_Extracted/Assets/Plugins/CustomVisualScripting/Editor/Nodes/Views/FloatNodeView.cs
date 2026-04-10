@@ -24,21 +24,23 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 mainContainer.Add(controlsContainer);
             }
             
-            var nameField = new TextField("Variable Name");
+            var nameField = new TextField();
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue}" : $"{_node.variableName} = {_node.floatValue}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             });
             controlsContainer.Add(nameField);
             
-            var valueField = new FloatField("Value");
+            var valueField = new FloatField();
             valueField.value = _node.floatValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.floatValue = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue}" : $"{_node.variableName} = {_node.floatValue}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             });
             controlsContainer.Add(valueField);
+            
+            title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         }
     }
 }

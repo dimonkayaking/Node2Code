@@ -24,7 +24,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 mainContainer.Add(controlsContainer);
             }
             
-            var nameField = new TextField("Variable Name");
+            var nameField = new TextField();
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
@@ -32,13 +32,16 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             });
             controlsContainer.Add(nameField);
             
-            var valueField = new IntegerField("Value");
+            var valueField = new IntegerField();
             valueField.value = _node.intValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.intValue = evt.newValue;
                 title = string.IsNullOrEmpty(_node.variableName) ? $"Int: {_node.intValue}" : $"{_node.variableName} = {_node.intValue}";
             });
             controlsContainer.Add(valueField);
+            
+            // Set initial title
+            title = string.IsNullOrEmpty(_node.variableName) ? $"Int: {_node.intValue}" : $"{_node.variableName} = {_node.intValue}";
         }
     }
 }

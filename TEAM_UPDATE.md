@@ -6,49 +6,20 @@
 
 ---
 
-## Обновление от 07.04.2026 — Sprint 2 доработка (Backend 2, Егор)
+## Обновление от 09.04.2026 — Sprint 2 финальная доработка (Backend 2, Егор)
 
-**Контекст:** исправления по ТЗ доработки — баги с float, потерянные связи, удалённые ноды, «Run» кнопка, if/else.
+**Контекст:** полная переработка логики переменных по ТЗ тимлида. Избавление от нод `VariableSet`/`VariableDeclaration`, фиксы парсера и локали float.
 
 | Область | Что сделано |
 |--------|-----------|
-| **Критический баг: пропущенные ноды** | Воссозданы удалённые файлы: `ElseNode.cs`, `VariableDeclarationNode.cs`, `SetVariableNode.cs`, `GetVariableNode.cs`. Без них парсер создавал ноды `VariableSet`/`VariableDeclaration`/`FlowElse`, а `VisualScriptingWindow` не мог отобразить их (возвращал `null`). |
-| **Критический баг: связи не восстанавливались** | `VisualScriptingWindow.UpdateGraphView` фильтровал ВСЕ execution-flow рёбра (`execIn`/`execOut`/`true`/`false`/`body`). Убрана фильтрация → теперь все рёбра (данные + поток выполнения) восстанавливаются в графе. |
-| **Баг float (локаль)** | `FloatNode` использовал системную локаль (русская → запятая вместо точки). Парсер хранит `44.555`, но `float.TryParse` с RU-локалью ожидает `44,555` → значение терялось (всегда 0). Исправлено: `CultureInfo.InvariantCulture` в `InitializeFromData`, `ToNodeData`, `ToString`, `TryParse`. То же — в `SyncFullGraphFromView`. |
-| **Баг: отсутствие `FlowElse` / `VariableSet` / `VariableDeclaration` в `CreateNodeFromData`** | Добавлены три отсутствующих `case` в `CreateNodeFromData`. |
-| **Порты: улучшен поиск** | Вместо `p.fieldName == name \|\| p.portName == name` теперь `p.fieldName == name \|\| p.portData.displayName == name` — корректно находит порты `true`/`false` на `IfNode` (`fieldName = "trueBranch"`, `displayName = "true"`). |
-| **`ConsoleWriteLineNode`** | Добавлено поле `messageText` для прямого ввода сообщения в ноде. `Process()` использует подключённый `message` или fallback на `messageText`. |
-| **`GraphRunner` — полностью переписан** | Новая модель: flow-based execution через `ExecuteFlow` → `EvaluateNode`. Поддерживает `VariableDeclaration`, `VariableSet`, `FlowIf` (ветвление `true`/`false`), `FlowFor` (init/condition/body/increment, до 10 000 итераций), `FlowWhile`, `Console.WriteLine` → вывод в консоль. Кнопка **Run** теперь синхронизирует граф и выполняет его. |
-| **`SyncFullGraphFromView`** | `float` → `InvariantCulture`; `ConsoleWriteLineNode.messageText` сохраняется; убрано дублирование логирования. |
-| **Тесты** | **42 теста** `dotnet test` — все зелёные (27 старых + 15 новых). Новые: переприсваивание переменных, `float` roundtrip, `if` с переменными в ветках, `if`/`else if`/`else` цепочка, `Console.WriteLine` с переменными, множественные `Console.WriteLine`, `for`/`while` дополнительные сценарии, структура парсера (exec flow edges, condition edge, if-else ladder, VariableSet, Console.WriteLine node). |
-
-### Изменённые файлы (Backend 2, доработка)
-
-```
-Editor/Windows/VisualScriptingWindow.cs    ← исправлена фильтрация рёбер, float-локаль, добавлены VariableSet/VariableDeclaration/FlowElse
-Editor/Nodes/Base/BaseExecutionNode.cs     ← уже наследует CustomBaseNode (верифицировано)
-Editor/Nodes/Flow/ElseNode.cs              ← воссоздан
-Editor/Nodes/Flow/ConsoleWriteLineNode.cs  ← добавлено поле messageText
-Editor/Nodes/Literals/FloatNode.cs         ← InvariantCulture
-Editor/Nodes/Variables/VariableDeclarationNode.cs ← воссоздан (execIn/execOut + output)
-Editor/Nodes/Variables/SetVariableNode.cs  ← воссоздан (execIn/execOut + value→output)
-Editor/Nodes/Variables/GetVariableNode.cs  ← воссоздан
-Runtime/Execution/GraphRunner.cs           ← полностью переписан (flow-based execution)
-VisualScripting.Tests/GeneratorTests.cs    ← 15 новых тестов
-```
-
----
-
-## Обновление от 05.04.2026 — Sprint 2 (Backend 2, Егор)
-
-| Область | Изменение |
-|--------|-----------|
-| **Визуальные ноды циклов** | Созданы `ForNode.cs` и `WhileNode.cs` (`Editor/Nodes/Flow/`) с портами по контракту. |
-| **Нода `Console.WriteLine`** | Создана `ConsoleWriteLineNode.cs` с портами `execIn`, `message` → `execOut`. |
-| **Ноды преобразования типов** | `IntParseNode.cs`, `FloatParseNode.cs`, `ToStringNode.cs` в `Editor/Nodes/Conversion/`. |
-| **Ноды `Mathf`** | `MathfAbsNode.cs`, `MathfMaxNode.cs`, `MathfMinNode.cs` в `Editor/Nodes/Math/`. |
-| **`GraphSerializer`** | Сериализация/десериализация рёбер + фабрика нод. |
-| **Тесты** | 27 тестов — зелёные. |
+| **Очистка контракта** | Удалены ноды `VariableSet`, `VariableDeclaration`, `VariableGet`, `VariableAssignment` из `NodeType` во всём проекте (Core + Unity). |
+| **Логика переменных** | `RoslynCodeParser` и `SimpleCodeGenerator` полностью переписаны: вместо создания специальных "нод переменных", теперь для объявлений и присваиваний (например, `int x = 20;`) парсер создаёт обычный литерал или ноду операции, прописывая ей свойство `VariableName = "x"`. Если значение берётся из другой ноды (`x = y`), создаётся литерал-заглушка с входом `inputValue`. Это решает проблемы с удалением нод и визуальным "мусором". |
+| **Баг float (локаль)** | Везде добавлен `CultureInfo.InvariantCulture` (`FloatNode.cs`, `VisualScriptingWindow.cs`). Это решает ошибку, когда `44.555` не парсилось при русской локали ОС. |
+| **Нода `Console.WriteLine`** | Добавлено открытое поле `messageText` на самой ноде. Теперь можно вписать текст прямо в ноду без обязательного подключения провода. |
+| **Упрощение UI литералов** | У нод литералов (Int, Float, Bool, String) скрыты системные поля (добавлен `[HideInInspector]`), заголовок (`name`) возвращает лаконичные значения (например, `Int: 20` или `x = 20`), как и просил тимлид. |
+| **Кнопка `Run`** | В `VisualScriptingWindow.cs` и `GraphRunner.cs` полностью исправлен запуск графа. Теперь `GraphRunner` отслеживает цепочку `execIn/execOut`, заполняет локальный словарь переменных по их `VariableName` и корректно выполняет ветвления `if`, циклы и методы. |
+| **Восстановление связей** | В `VisualScriptingWindow.cs` убрано ошибочное игнорирование `execIn`/`execOut` при десериализации рёбер, порты ищутся по `fieldName` или `displayName`, поэтому "the edge can't be properly connected" больше не возникает. |
+| **Тесты** | Добавлено 15 новых тестов на все изменённые сценарии. Итого 42/42 тестов проходят успешно (`dotnet test`). |
 
 ---
 

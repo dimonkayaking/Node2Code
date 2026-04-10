@@ -121,6 +121,7 @@ namespace CustomVisualScripting.Editor.Nodes
                 
                 // Flow
                 NodeType.FlowIf => BaseNode.CreateFromType<IfNode>(Vector2.zero) as CustomBaseNode,
+                NodeType.FlowElse => BaseNode.CreateFromType<ElseNode>(Vector2.zero) as CustomBaseNode,
                 NodeType.FlowFor => BaseNode.CreateFromType<ForNode>(Vector2.zero) as CustomBaseNode,
                 NodeType.FlowWhile => BaseNode.CreateFromType<WhileNode>(Vector2.zero) as CustomBaseNode,
                 NodeType.ConsoleWriteLine => BaseNode.CreateFromType<ConsoleWriteLineNode>(Vector2.zero) as CustomBaseNode,

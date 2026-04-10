@@ -18,6 +18,7 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         [Output("output")]
         public float output;
 
+        [HideInInspector]
         public float floatValue = 0f;
 
         public override string name => string.IsNullOrEmpty(variableName)

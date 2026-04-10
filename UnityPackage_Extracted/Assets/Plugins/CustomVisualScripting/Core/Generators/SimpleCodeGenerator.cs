@@ -190,9 +190,17 @@ namespace VisualScripting.Core.Generators
         {
             var pad = Pad(indent);
 
-            var condEdge = _graph.Edges.FirstOrDefault(
-                e => e.ToNodeId == ifNode.Id && e.ToPort == "condition");
-            var condExpr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "true";
+            string condExpr;
+            if (ifNode.ConditionSubGraph != null && ifNode.ConditionSubGraph.Nodes.Count > 0)
+            {
+                condExpr = GenerateExpressionFromSubGraph(ifNode.ConditionSubGraph);
+            }
+            else
+            {
+                var condEdge = _graph.Edges.FirstOrDefault(
+                    e => e.ToNodeId == ifNode.Id && e.ToPort == "condition");
+                condExpr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "true";
+            }
 
             if (inline)
                 sb.AppendLine($"if ({condExpr})");
@@ -201,15 +209,23 @@ namespace VisualScripting.Core.Generators
 
             sb.AppendLine($"{pad}{{");
 
-            var trueEdge = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == ifNode.Id && e.FromPort == "true");
-            if (trueEdge != null)
-                EmitChain(trueEdge.ToNodeId, sb, indent + 1);
+            if (ifNode.BodySubGraph != null && ifNode.BodySubGraph.Nodes.Count > 0)
+            {
+                GenerateStatementsFromSubGraph(ifNode.BodySubGraph, sb, indent + 1);
+            }
+            else
+            {
+                var trueEdge = _graph.Edges.FirstOrDefault(
+                    e => e.FromNodeId == ifNode.Id && e.FromPort == "true");
+                if (trueEdge != null)
+                    EmitChain(trueEdge.ToNodeId, sb, indent + 1);
+            }
 
             sb.AppendLine($"{pad}}}");
 
             var falseEdge = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == ifNode.Id && e.FromPort == "false");
+                e => e.FromNodeId == ifNode.Id &&
+                     (e.FromPort == "false" || e.FromPort == "falseBranch"));
             if (falseEdge == null || !_map.ContainsKey(falseEdge.ToNodeId))
                 return;
 
@@ -227,13 +243,137 @@ namespace VisualScripting.Core.Generators
                 sb.AppendLine($"{pad}else");
                 sb.AppendLine($"{pad}{{");
 
-                var bodyEdge = _graph.Edges.FirstOrDefault(
-                    e => e.FromNodeId == target.Id && e.FromPort == "execOut");
-                if (bodyEdge != null)
-                    EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+                if (target.BodySubGraph != null && target.BodySubGraph.Nodes.Count > 0)
+                {
+                    GenerateStatementsFromSubGraph(target.BodySubGraph, sb, indent + 1);
+                }
+                else
+                {
+                    var bodyEdge = _graph.Edges.FirstOrDefault(
+                        e => e.FromNodeId == target.Id && e.FromPort == "execOut");
+                    if (bodyEdge != null)
+                        EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+                }
 
                 sb.AppendLine($"{pad}}}");
             }
+        }
+
+        private string GenerateExpressionFromSubGraph(GraphData subGraph)
+        {
+            var subMap = subGraph.Nodes.ToDictionary(n => n.Id);
+            var outgoing = new HashSet<string>(subGraph.Edges.Select(e => e.FromNodeId));
+            var sinkNodes = subGraph.Nodes.Where(n => !outgoing.Contains(n.Id)).ToList();
+
+            if (sinkNodes.Count == 0)
+                return "true";
+
+            return EmitSubExpr(sinkNodes.Last().Id, subMap, subGraph, false);
+        }
+
+        private string EmitSubExpr(string nodeId, Dictionary<string, NodeData> map, GraphData graph, bool wrap)
+        {
+            if (!map.TryGetValue(nodeId, out var node)) return "???";
+            if (!string.IsNullOrEmpty(node.VariableName)) return node.VariableName;
+            if (IsLiteral(node.Type)) return LiteralRhs(node);
+
+            string SubIn(string port) =>
+                graph.Edges.FirstOrDefault(e => e.ToNodeId == nodeId && e.ToPort == port)?.FromNodeId;
+
+            if (IsMath(node.Type))
+            {
+                var l = SubIn("inputA");
+                var r = SubIn("inputB");
+                if (l == null || r == null) return "???";
+                var expr = $"{EmitSubExpr(l, map, graph, true)} {MathOp(node.Type)} {EmitSubExpr(r, map, graph, true)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (IsCompare(node.Type))
+            {
+                var l = SubIn("left");
+                var r = SubIn("right");
+                if (l == null || r == null) return "???";
+                var expr = $"{EmitSubExpr(l, map, graph, true)} {CmpOp(node.Type)} {EmitSubExpr(r, map, graph, true)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (node.Type is NodeType.LogicalAnd or NodeType.LogicalOr)
+            {
+                var l = SubIn("left");
+                var r = SubIn("right");
+                if (l == null || r == null) return "???";
+                var op = node.Type == NodeType.LogicalAnd ? "&&" : "||";
+                var expr = $"{EmitSubExpr(l, map, graph, true)} {op} {EmitSubExpr(r, map, graph, true)}";
+                return wrap ? $"({expr})" : expr;
+            }
+
+            if (node.Type == NodeType.LogicalNot)
+            {
+                var i = SubIn("input");
+                if (i == null) return "???";
+                return $"!{EmitSubExpr(i, map, graph, true)}";
+            }
+
+            if (node.Type == NodeType.IntParse)
+            {
+                var s = SubIn("input");
+                return s != null ? $"int.Parse({EmitSubExpr(s, map, graph, false)})" : "???";
+            }
+
+            if (node.Type == NodeType.FloatParse)
+            {
+                var s = SubIn("input");
+                return s != null ? $"float.Parse({EmitSubExpr(s, map, graph, false)})" : "???";
+            }
+
+            if (node.Type == NodeType.ToStringConvert)
+            {
+                var v = SubIn("input");
+                return v != null ? $"{EmitSubExpr(v, map, graph, true)}.ToString()" : "???";
+            }
+
+            if (node.Type == NodeType.MathfAbs)
+            {
+                var v = SubIn("input");
+                return v != null ? $"System.Math.Abs({EmitSubExpr(v, map, graph, false)})" : "???";
+            }
+
+            if (node.Type is NodeType.MathfMax or NodeType.MathfMin)
+            {
+                var a = SubIn("inputA");
+                var b = SubIn("inputB");
+                if (a == null || b == null) return "???";
+                var fn = node.Type == NodeType.MathfMax ? "Max" : "Min";
+                return $"System.Math.{fn}({EmitSubExpr(a, map, graph, false)}, {EmitSubExpr(b, map, graph, false)})";
+            }
+
+            return "???";
+        }
+
+        private void GenerateStatementsFromSubGraph(GraphData subGraph, StringBuilder sb, int indent)
+        {
+            var savedMap = _map;
+            var savedGraph = _graph;
+            var savedEmitted = _emitted;
+
+            _map = subGraph.Nodes.ToDictionary(n => n.Id);
+            _graph = subGraph;
+            _emitted = new HashSet<string>();
+
+            var hasIncomingExec = new HashSet<string>(
+                subGraph.Edges.Where(e => e.ToPort == "execIn").Select(e => e.ToNodeId));
+
+            var roots = subGraph.Nodes
+                .Where(n => !hasIncomingExec.Contains(n.Id) && IsStatementEntryNode(n))
+                .ToList();
+
+            foreach (var root in roots)
+                EmitChain(root.Id, sb, indent);
+
+            _map = savedMap;
+            _graph = savedGraph;
+            _emitted = savedEmitted;
         }
 
         private void EmitFor(NodeData forNode, StringBuilder sb, int indent)

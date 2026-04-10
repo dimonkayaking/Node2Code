@@ -6,7 +6,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Literals
 {
-    [NodeMenuItem("Literals/String")]
+    [Serializable, NodeMenuItem("Literals/String")]
     public class StringNode : CustomBaseNode
     {
         public override NodeType NodeType => NodeType.LiteralString;
@@ -17,9 +17,10 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         [Output("output")]
         public string output;
 
+        [HideInInspector]
         public string stringValue = "";
 
-        public override string name => string.IsNullOrEmpty(variableName) ? $"String: {stringValue}" : $"{variableName}";
+        public override string name => string.IsNullOrEmpty(variableName) ? $"String: \"{stringValue}\"" : $"{variableName} = \"{stringValue}\"";
 
         protected override void Process()
         {

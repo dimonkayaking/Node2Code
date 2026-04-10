@@ -7,63 +7,48 @@ namespace VisualScripting.Core.Models
         LiteralInt,
         LiteralFloat,
         LiteralString,
-        
+
         // Математические операции
         MathAdd,
         MathSubtract,
         MathMultiply,
         MathDivide,
-        
+        MathModulo,
+
         // Сравнения
         CompareEqual,
         CompareGreater,
         CompareLess,
-        
+        CompareNotEqual,
+        CompareGreaterOrEqual,
+        CompareLessOrEqual,
+
+        // Логические операции
+        LogicalAnd,
+        LogicalOr,
+        LogicalNot,
+
         // Flow
         FlowIf,
-        
+        FlowElse,
+        FlowFor,
+        FlowWhile,
+        ConsoleWriteLine,
+
         // Debug
         DebugLog,
-        
+
         // Unity
         UnityGetPosition,
         UnitySetPosition,
         UnityVector3,
-        
-        // Переменные
-        VariableGet,
-        VariableSet,
-        VariableDeclaration,
-        
-        // Дополнительные (для совместимости с NodeExecutor)
-        VariableInt,
-        VariableFloat,
-        VariableString,
-        VariableBool,
-        VariableRead,
-        VariableAssignment,
-        IfStatement,
-        TransformPositionRead,
-        TransformPositionSet,
-        Vector3Create,
 
-        // MVP v3 — расширение парсера
-        MathModulo,
-        CompareNotEqual,
-        CompareGreaterOrEqual,
-        CompareLessOrEqual,
-        LogicalAnd,
-        LogicalOr,
-        LogicalNot,
-        FlowElse,
-
-        // Sprint 2 — циклы и встроенные методы
-        FlowFor,
-        FlowWhile,
-        ConsoleWriteLine,
+        // Конвертация
         IntParse,
         FloatParse,
         ToStringConvert,
+
+        // Mathf
         MathfAbs,
         MathfMax,
         MathfMin

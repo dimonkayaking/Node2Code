@@ -6,7 +6,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 
 namespace CustomVisualScripting.Editor.Nodes.Literals
 {
-    [NodeMenuItem("Literals/Bool")]
+    [Serializable, NodeMenuItem("Literals/Bool")]
     public class BoolNode : CustomBaseNode
     {
         public override NodeType NodeType => NodeType.LiteralBool;
@@ -17,6 +17,7 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         [Output("output")]
         public bool output;
 
+        [HideInInspector]
         public bool boolValue = true;
 
         public override string name => string.IsNullOrEmpty(variableName) ? $"Bool: {boolValue}" : $"{variableName} = {boolValue}";

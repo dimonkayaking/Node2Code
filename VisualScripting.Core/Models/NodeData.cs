@@ -11,5 +11,8 @@ namespace VisualScripting.Core.Models
         public string VariableName { get; set; } = "";
         public Dictionary<string, string> InputConnections { get; set; } = new Dictionary<string, string>();
         public Dictionary<string, string> ExecutionFlow { get; set; } = new Dictionary<string, string>();
+
+        public GraphData? ConditionSubGraph { get; set; }
+        public GraphData? BodySubGraph { get; set; }
     }
 }
