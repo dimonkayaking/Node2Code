@@ -235,8 +235,7 @@ namespace VisualScripting.Core.Generators
             if (sinkNodes.Count == 0)
                 return "true";
 
-            var preferredSink = sinkNodes.LastOrDefault(n => IsConditionExpressionNode(n.Type)) ?? sinkNodes.Last();
-            return EmitSubExpr(preferredSink.Id, subMap, subGraph, false);
+            return EmitSubExpr(sinkNodes.Last().Id, subMap, subGraph, false);
         }
 
         private string EmitSubExpr(string nodeId, Dictionary<string, NodeData> map, GraphData graph, bool wrap)
@@ -667,21 +666,15 @@ namespace VisualScripting.Core.Generators
             t is NodeType.IntParse or NodeType.FloatParse or NodeType.ToStringConvert
                 or NodeType.MathfAbs or NodeType.MathfMax or NodeType.MathfMin;
 
-        private static bool IsConditionExpressionNode(NodeType t) =>
-            IsBinaryOp(t) || t == NodeType.LogicalNot || IsBuiltinExpressionNode(t);
-
         /// <summary>Узел, с которого начинается цепочка исполнения (первая инструкция или нет входящего execIn).</summary>
-        private bool IsStatementEntryNode(NodeData n)
+        private static bool IsStatementEntryNode(NodeData n)
         {
             if (n.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
                 or NodeType.ConsoleWriteLine)
                 return true;
 
             if (IsLiteral(n.Type) && !string.IsNullOrEmpty(n.VariableName))
-            {
-                // Literal inside subgraph without inputValue is a variable reference, not a statement.
-                return _graph.Edges.Any(e => e.ToNodeId == n.Id && e.ToPort == "inputValue");
-            }
+                return true;
 
             if ((IsBinaryOp(n.Type) || n.Type == NodeType.LogicalNot || IsBuiltinExpressionNode(n.Type)) &&
                 !string.IsNullOrEmpty(n.VariableName))

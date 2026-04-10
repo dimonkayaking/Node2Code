@@ -124,22 +124,22 @@ namespace CustomVisualScripting.Integration
                 case NodeType.LiteralFloat: return "Float";
                 case NodeType.LiteralString: return "String";
                 
-                case NodeType.MathAdd: return "Add (+)";
-                case NodeType.MathSubtract: return "Subtract (-)";
-                case NodeType.MathMultiply: return "Multiply (*)";
-                case NodeType.MathDivide: return "Divide (/)";
-                case NodeType.MathModulo: return "Modulo (%)";
+                case NodeType.MathAdd: return "Add";
+                case NodeType.MathSubtract: return "Subtract";
+                case NodeType.MathMultiply: return "Multiply";
+                case NodeType.MathDivide: return "Divide";
+                case NodeType.MathModulo: return "Modulo";
                 
-                case NodeType.CompareEqual: return "Equal (==)";
-                case NodeType.CompareGreater: return "Greater (>)";
-                case NodeType.CompareLess: return "Less (<)";
-                case NodeType.CompareNotEqual: return "Not Equal (!=)";
-                case NodeType.CompareGreaterOrEqual: return "Greater Or Equal (>=)";
-                case NodeType.CompareLessOrEqual: return "Less Or Equal (<=)";
+                case NodeType.CompareEqual: return "Equal";
+                case NodeType.CompareGreater: return "Greater";
+                case NodeType.CompareLess: return "Less";
+                case NodeType.CompareNotEqual: return "Not Equal";
+                case NodeType.CompareGreaterOrEqual: return "Greater Or Equal";
+                case NodeType.CompareLessOrEqual: return "Less Or Equal";
 
-                case NodeType.LogicalAnd: return "And (&&)";
-                case NodeType.LogicalOr: return "Or (||)";
-                case NodeType.LogicalNot: return "Not (!)";
+                case NodeType.LogicalAnd: return "And";
+                case NodeType.LogicalOr: return "Or";
+                case NodeType.LogicalNot: return "Not";
                 
                 case NodeType.FlowIf: return "If";
                 case NodeType.FlowElse: return "Else";

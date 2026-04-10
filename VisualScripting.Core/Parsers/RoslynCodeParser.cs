@@ -126,11 +126,6 @@ namespace VisualScripting.Core.Parsers
                         prevFlowNode = host.NodeId;
                         prevFlowPort = host.ExecOutPort;
                     }
-                    else
-                    {
-                        prevFlowNode = null;
-                        prevFlowPort = "execOut";
-                    }
                 }
                 else if (stmt is WhileStatementSyntax whileStmt)
                 {
@@ -140,11 +135,6 @@ namespace VisualScripting.Core.Parsers
                         prevFlowNode = host.NodeId;
                         prevFlowPort = host.ExecOutPort;
                     }
-                    else
-                    {
-                        prevFlowNode = null;
-                        prevFlowPort = "execOut";
-                    }
                 }
                 else
                 {
@@ -153,11 +143,6 @@ namespace VisualScripting.Core.Parsers
                     {
                         prevFlowNode = host.NodeId;
                         prevFlowPort = host.ExecOutPort;
-                    }
-                    else
-                    {
-                        prevFlowNode = null;
-                        prevFlowPort = "execOut";
                     }
                 }
             }
@@ -398,7 +383,7 @@ namespace VisualScripting.Core.Parsers
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, nodeId, "execIn");
 
-            return null;
+            return new FlowHost { NodeId = nodeId };
         }
 
         private string CreateLiteralStringNode(string text)
@@ -565,7 +550,7 @@ namespace VisualScripting.Core.Parsers
 
             _graph.Nodes.Add(forNodeData);
 
-            return null;
+            return new FlowHost { NodeId = forId, ExecOutPort = "execOut" };
         }
 
         private void VisitForInitialization(ForStatementSyntax forStmt, string forId)
@@ -717,7 +702,7 @@ namespace VisualScripting.Core.Parsers
 
             _graph.Nodes.Add(whileNodeData);
 
-            return null;
+            return new FlowHost { NodeId = whileId, ExecOutPort = "execOut" };
         }
 
         private FlowHost? VisitIfChain(IfStatementSyntax stmt, string? incomingNodeId, string? incomingPort)
@@ -780,7 +765,7 @@ namespace VisualScripting.Core.Parsers
                 }
             }
 
-            return null;
+            return new FlowHost { NodeId = ifNodeId, ExecOutPort = "execOut" };
         }
 
         private void PushSubGraph(GraphData target)
@@ -843,11 +828,6 @@ namespace VisualScripting.Core.Parsers
                 {
                     prevId = host.NodeId;
                     prevPort = host.ExecOutPort;
-                }
-                else
-                {
-                    prevId = null;
-                    prevPort = "execOut";
                 }
             }
         }
