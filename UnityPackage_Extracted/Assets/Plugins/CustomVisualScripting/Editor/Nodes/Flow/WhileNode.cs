@@ -7,7 +7,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/While")]
-    public class WhileNode : BaseExecutionNode
+    public class WhileNode : BaseFlowNode
     {
         public override NodeType NodeType => NodeType.FlowWhile;
 

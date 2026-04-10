@@ -7,7 +7,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/Console.WriteLine")]
-    public class ConsoleWriteLineNode : BaseExecutionNode
+    public class ConsoleWriteLineNode : BaseFlowNode
     {
         public override NodeType NodeType => NodeType.ConsoleWriteLine;
 

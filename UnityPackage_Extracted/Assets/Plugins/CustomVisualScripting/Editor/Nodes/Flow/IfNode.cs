@@ -7,7 +7,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/If")]
-    public class IfNode : BaseExecutionNode
+    public class IfNode : BaseFlowNode
     {
         public override NodeType NodeType => NodeType.FlowIf;
 
