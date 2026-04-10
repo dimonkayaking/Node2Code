@@ -124,6 +124,21 @@ namespace VisualScripting.Core.Generators
                 && _graph.Edges.Any(e => e.FromNodeId == node.Id))
                 return;
 
+            // ExpressionOverride takes priority: it stores the original source expression
+            // (e.g. "x + y") and is robust even when the inputValue edge is lost after round-trip.
+            if (!string.IsNullOrEmpty(node.ExpressionOverride))
+            {
+                if (_declared.Contains(vn))
+                    sb.AppendLine($"{pad}{vn} = {node.ExpressionOverride};");
+                else
+                {
+                    string type = GetKeywordForType(node.ValueType);
+                    sb.AppendLine($"{pad}{type} {vn} = {node.ExpressionOverride};");
+                    _declared.Add(vn);
+                }
+                return;
+            }
+
             var incomingEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputValue");
             
             if (incomingEdge != null && _map.TryGetValue(incomingEdge.FromNodeId, out var sourceNode))

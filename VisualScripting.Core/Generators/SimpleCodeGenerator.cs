@@ -115,7 +115,13 @@ namespace VisualScripting.Core.Generators
             if (IsLiteral(node.Type))
             {
                 var valueEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputValue");
-                string rhs = valueEdge != null ? EmitCondExpr(valueEdge.FromNodeId) : LiteralRhs(node);
+                string rhs;
+                if (!string.IsNullOrEmpty(node.ExpressionOverride))
+                    rhs = node.ExpressionOverride;
+                else if (valueEdge != null)
+                    rhs = EmitCondExpr(valueEdge.FromNodeId);
+                else
+                    rhs = LiteralRhs(node);
 
                 if (_declared.Contains(vn))
                     sb.AppendLine($"{pad}{vn} = {rhs};");

@@ -14,5 +14,11 @@ namespace VisualScripting.Core.Models
 
         public GraphData ConditionSubGraph { get; set; }
         public GraphData BodySubGraph { get; set; }
+
+        /// <summary>
+        /// Stores the original source expression text (e.g. "x + y") for robust code generation
+        /// when the node graph edges may not be fully preserved (e.g. after editor round-trip).
+        /// </summary>
+        public string ExpressionOverride { get; set; } = "";
     }
 }

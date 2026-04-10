@@ -261,11 +261,12 @@ namespace VisualScripting.Core.Parsers
                 {
                     litId = CreateDefaultLiteralNode(vType, name);
                     AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
-                    var computed = TryEvaluateExpression(rootId);
-                    if (computed != null)
+                    var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
+                    if (litNode != null)
                     {
-                        var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
-                        if (litNode != null)
+                        litNode.ExpressionOverride = v.Initializer.Value.ToString().Trim();
+                        var computed = TryEvaluateExpression(rootId);
+                        if (computed != null)
                             litNode.Value = computed;
                     }
                 }
@@ -303,7 +304,11 @@ namespace VisualScripting.Core.Parsers
 
                     var rootNode = _graph.Nodes.FirstOrDefault(n => n.Id == rootId);
                     string litId;
-                    if (rootNode != null && IsLiteralNodeType(rootNode.Type))
+                    // Only rename the RHS node when it is a fresh unnamed literal (e.g. the node
+                    // created for the literal 10 in "z = 10"). When the node already has a variable
+                    // name it is a variable-reference copy and must NOT be renamed.
+                    if (rootNode != null && IsLiteralNodeType(rootNode.Type)
+                        && string.IsNullOrEmpty(rootNode.VariableName))
                     {
                         rootNode.VariableName = name;
                         litId = rootId;
@@ -313,6 +318,9 @@ namespace VisualScripting.Core.Parsers
                         var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
                         litId = CreateDefaultLiteralNode(vType, name);
                         AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
+                        var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
+                        if (litNode != null)
+                            litNode.ExpressionOverride = assign.Right.ToString().Trim();
                     }
 
                     _symbolToNodeId[name] = litId;
@@ -444,11 +452,20 @@ namespace VisualScripting.Core.Parsers
                 return null;
             }
 
-            if (!_symbolToNodeId.TryGetValue(name, out var leftId))
+            string leftId;
+            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            {
+                leftId = CreateVariableRefInSubGraph(name);
+            }
+            else if (!_symbolToNodeId.TryGetValue(name, out var tempLeft))
             {
                 _errors.Add(
                     $"Неизвестная переменная «{name}» ({FormatUserLocation(assign.SyntaxTree, assign.Span)}).");
                 return null;
+            }
+            else
+            {
+                leftId = tempLeft;
             }
 
             var rightId = VisitExpression(assign.Right, false, null, out var unsupported);
@@ -486,11 +503,20 @@ namespace VisualScripting.Core.Parsers
             string prevPort)
         {
             var name = idExpr.Identifier.Text;
-            if (!_symbolToNodeId.TryGetValue(name, out var varNodeId))
+            string varNodeId;
+            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            {
+                varNodeId = CreateVariableRefInSubGraph(name);
+            }
+            else if (!_symbolToNodeId.TryGetValue(name, out var tempVar))
             {
                 _errors.Add(
                     $"Неизвестная переменная «{name}» ({FormatUserLocation(idExpr.SyntaxTree, idExpr.Span)}).");
                 return null;
+            }
+            else
+            {
+                varNodeId = tempVar;
             }
 
             var oneId = CreateLiteralIntOne();
