@@ -167,7 +167,11 @@ namespace VisualScripting.Core.Generators
             if (node == null) return "???";
             
             if (IsLiteral(node.Type))
+            {
+                if (!string.IsNullOrEmpty(node.VariableName))
+                    return node.VariableName;
                 return LiteralRhs(node);
+            }
             
             if (IsMath(node.Type))
             {

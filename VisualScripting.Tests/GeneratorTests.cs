@@ -529,7 +529,7 @@ else
         Assert.NotNull(elseNode);
 
         var falseEdge = result.Graph.Edges.FirstOrDefault(
-            e => e.FromNodeId == ifNode.Id && e.FromPort == "false" && e.ToNodeId == elseNode.Id);
+            e => e.FromNodeId == ifNode.Id && e.FromPort == "falseBranch" && e.ToNodeId == elseNode.Id);
         Assert.NotNull(falseEdge);
 
         Assert.NotNull(elseNode.BodySubGraph);

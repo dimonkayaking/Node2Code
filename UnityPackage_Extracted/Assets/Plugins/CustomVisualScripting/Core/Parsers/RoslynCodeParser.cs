@@ -261,6 +261,13 @@ namespace VisualScripting.Core.Parsers
                 {
                     litId = CreateDefaultLiteralNode(vType, name);
                     AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
+                    var computed = TryEvaluateExpression(rootId);
+                    if (computed != null)
+                    {
+                        var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
+                        if (litNode != null)
+                            litNode.Value = computed;
+                    }
                 }
 
                 _symbolToNodeId[name] = litId;
@@ -737,11 +744,7 @@ namespace VisualScripting.Core.Parsers
             _graph.Nodes.Add(ifNodeData);
 
             if (incomingNodeId != null && incomingPort != null)
-            {
                 AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
-                if (incomingPort == "falseBranch")
-                    AddEdge(incomingNodeId, "false", ifNodeId, "execIn");
-            }
 
             if (stmt.Else != null)
             {
@@ -770,7 +773,6 @@ namespace VisualScripting.Core.Parsers
 
                     _graph.Nodes.Add(elseNodeData);
                     AddEdge(ifNodeId, "falseBranch", elseNodeId, "execIn");
-                    AddEdge(ifNodeId, "false", elseNodeId, "execIn");
                 }
             }
 
@@ -1054,6 +1056,42 @@ namespace VisualScripting.Core.Parsers
             AddEdge(leftId, GetDataOutPortForNodeId(leftId), opId, leftPort);
             AddEdge(rightId, GetDataOutPortForNodeId(rightId), opId, rightPort);
             return opId;
+        }
+
+        /// <summary>Constant-fold math trees at parse time (e.g. int z = x + y with x=10,y=20 → "30").</summary>
+        private string TryEvaluateExpression(string nodeId)
+        {
+            var node = _graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (node == null) return null;
+
+            if (IsLiteralNodeType(node.Type) && !string.IsNullOrEmpty(node.Value))
+                return node.Value;
+
+            if (!IsMath(node.Type)) return null;
+
+            var leftEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == nodeId && e.ToPort == "inputA");
+            var rightEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == nodeId && e.ToPort == "inputB");
+            if (leftEdge == null || rightEdge == null) return null;
+
+            var leftVal = TryEvaluateExpression(leftEdge.FromNodeId);
+            var rightVal = TryEvaluateExpression(rightEdge.FromNodeId);
+            if (leftVal == null || rightVal == null) return null;
+
+            if (int.TryParse(leftVal, out int li) && int.TryParse(rightVal, out int ri))
+            {
+                int result = node.Type switch
+                {
+                    NodeType.MathAdd => li + ri,
+                    NodeType.MathSubtract => li - ri,
+                    NodeType.MathMultiply => li * ri,
+                    NodeType.MathDivide when ri != 0 => li / ri,
+                    NodeType.MathModulo when ri != 0 => li % ri,
+                    _ => 0
+                };
+                return result.ToString();
+            }
+
+            return null;
         }
 
         private static bool IsMath(NodeType t) =>
