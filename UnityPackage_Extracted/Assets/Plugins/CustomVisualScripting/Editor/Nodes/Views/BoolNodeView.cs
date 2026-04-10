@@ -27,7 +27,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"{_node.variableName} = {_node.boolValue}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"Bool: {_node.variableName} = {_node.boolValue}";
             });
             controlsContainer.Add(nameField);
             
@@ -35,11 +35,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             valueField.value = _node.boolValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.boolValue = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"{_node.variableName} = {_node.boolValue}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"Bool: {_node.variableName} = {_node.boolValue}";
             });
             controlsContainer.Add(valueField);
             
-            title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"{_node.variableName} = {_node.boolValue}";
+            title = string.IsNullOrEmpty(_node.variableName) ? $"Bool: {_node.boolValue}" : $"Bool: {_node.variableName} = {_node.boolValue}";
         }
     }
 }

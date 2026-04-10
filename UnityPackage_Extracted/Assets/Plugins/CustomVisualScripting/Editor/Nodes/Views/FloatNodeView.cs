@@ -28,7 +28,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             nameField.value = _node.variableName;
             nameField.RegisterValueChangedCallback(evt => {
                 _node.variableName = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"Float: {_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             });
             controlsContainer.Add(nameField);
             
@@ -36,11 +36,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             valueField.value = _node.floatValue;
             valueField.RegisterValueChangedCallback(evt => {
                 _node.floatValue = evt.newValue;
-                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"Float: {_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             });
             controlsContainer.Add(valueField);
             
-            title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            title = string.IsNullOrEmpty(_node.variableName) ? $"Float: {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"Float: {_node.variableName} = {_node.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         }
     }
 }

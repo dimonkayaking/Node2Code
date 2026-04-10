@@ -733,13 +733,17 @@ namespace VisualScripting.Core.Parsers
             _graph.Nodes.Add(ifNodeData);
 
             if (incomingNodeId != null && incomingPort != null)
+            {
                 AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
+                if (incomingPort == "falseBranch")
+                    AddEdge(incomingNodeId, "false", ifNodeId, "execIn");
+            }
 
             if (stmt.Else != null)
             {
                 if (stmt.Else.Statement is IfStatementSyntax elseIf)
                 {
-                    VisitIfChain(elseIf, ifNodeId, "false");
+                    VisitIfChain(elseIf, ifNodeId, "falseBranch");
                 }
                 else
                 {
@@ -761,6 +765,7 @@ namespace VisualScripting.Core.Parsers
                     elseNodeData.BodySubGraph = elseBodyGraph;
 
                     _graph.Nodes.Add(elseNodeData);
+                    AddEdge(ifNodeId, "falseBranch", elseNodeId, "execIn");
                     AddEdge(ifNodeId, "false", elseNodeId, "execIn");
                 }
             }

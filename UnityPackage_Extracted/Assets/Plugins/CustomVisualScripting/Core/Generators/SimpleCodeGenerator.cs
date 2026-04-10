@@ -119,6 +119,11 @@ namespace VisualScripting.Core.Generators
             if (string.IsNullOrEmpty(vn))
                 return;
 
+            if (IsLiteral(node.Type) && string.IsNullOrEmpty(node.Value)
+                && !_graph.Edges.Any(e => e.ToNodeId == node.Id && e.ToPort == "inputValue")
+                && _graph.Edges.Any(e => e.FromNodeId == node.Id))
+                return;
+
             var incomingEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputValue");
             
             if (incomingEdge != null && _map.TryGetValue(incomingEdge.FromNodeId, out var sourceNode))

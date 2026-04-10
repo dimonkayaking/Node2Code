@@ -7,7 +7,7 @@ using CustomVisualScripting.Editor.Nodes.Base;
 namespace CustomVisualScripting.Editor.Nodes.Flow
 {
     [Serializable, NodeMenuItem("Flow/For")]
-    public class ForNode : BaseExecutionNode
+    public class ForNode : BaseFlowNode
     {
         public override NodeType NodeType => NodeType.FlowFor;
 

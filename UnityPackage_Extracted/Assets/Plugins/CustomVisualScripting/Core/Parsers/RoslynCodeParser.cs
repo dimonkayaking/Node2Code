@@ -106,46 +106,50 @@ namespace VisualScripting.Core.Parsers
             {
                 if (stmt is IfStatementSyntax ifStmt)
                 {
-                    var ifHost = VisitIfChain(ifStmt, prevFlowNode, prevFlowPort);
-                    if (ifHost != null)
-                    {
-                        prevFlowNode = ifHost.NodeId;
-                        prevFlowPort = ifHost.ExecOutPort;
-                    }
-                    else
-                    {
-                        prevFlowNode = null;
-                        prevFlowPort = "execOut";
-                    }
+                    _ = VisitIfChain(ifStmt, prevFlowNode, prevFlowPort);
+                    prevFlowNode = null;
+                    prevFlowPort = "execOut";
                 }
                 else if (stmt is ForStatementSyntax forStmt)
                 {
-                    var host = VisitForStatement(forStmt, prevFlowNode, prevFlowPort);
-                    if (host != null)
-                    {
-                        prevFlowNode = host.NodeId;
-                        prevFlowPort = host.ExecOutPort;
-                    }
+                    _ = VisitForStatement(forStmt, prevFlowNode, prevFlowPort);
+                    prevFlowNode = null;
+                    prevFlowPort = "execOut";
                 }
                 else if (stmt is WhileStatementSyntax whileStmt)
                 {
-                    var host = VisitWhileStatement(whileStmt, prevFlowNode, prevFlowPort);
-                    if (host != null)
-                    {
-                        prevFlowNode = host.NodeId;
-                        prevFlowPort = host.ExecOutPort;
-                    }
+                    _ = VisitWhileStatement(whileStmt, prevFlowNode, prevFlowPort);
+                    prevFlowNode = null;
+                    prevFlowPort = "execOut";
                 }
                 else
                 {
                     var host = VisitStatementForFlow(stmt, prevFlowNode, prevFlowPort);
                     if (host != null)
                     {
-                        prevFlowNode = host.NodeId;
-                        prevFlowPort = host.ExecOutPort;
+                        if (ShouldBreakFlowAfter(host.NodeId))
+                        {
+                            prevFlowNode = null;
+                            prevFlowPort = "execOut";
+                        }
+                        else
+                        {
+                            prevFlowNode = host.NodeId;
+                            prevFlowPort = host.ExecOutPort;
+                        }
                     }
                 }
             }
+        }
+
+        private bool ShouldBreakFlowAfter(string nodeId)
+        {
+            var node = _graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (node == null)
+                return false;
+
+            return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor
+                or NodeType.FlowWhile or NodeType.ConsoleWriteLine;
         }
 
         private sealed class FlowHost
@@ -733,13 +737,17 @@ namespace VisualScripting.Core.Parsers
             _graph.Nodes.Add(ifNodeData);
 
             if (incomingNodeId != null && incomingPort != null)
+            {
                 AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
+                if (incomingPort == "falseBranch")
+                    AddEdge(incomingNodeId, "false", ifNodeId, "execIn");
+            }
 
             if (stmt.Else != null)
             {
                 if (stmt.Else.Statement is IfStatementSyntax elseIf)
                 {
-                    VisitIfChain(elseIf, ifNodeId, "false");
+                    VisitIfChain(elseIf, ifNodeId, "falseBranch");
                 }
                 else
                 {
@@ -761,6 +769,7 @@ namespace VisualScripting.Core.Parsers
                     elseNodeData.BodySubGraph = elseBodyGraph;
 
                     _graph.Nodes.Add(elseNodeData);
+                    AddEdge(ifNodeId, "falseBranch", elseNodeId, "execIn");
                     AddEdge(ifNodeId, "false", elseNodeId, "execIn");
                 }
             }
@@ -809,25 +818,33 @@ namespace VisualScripting.Core.Parsers
 
                 if (st is ForStatementSyntax nestedFor)
                 {
-                    var fh = VisitForStatement(nestedFor, prevId, prevPort);
-                    if (fh != null) { prevId = fh.NodeId; prevPort = fh.ExecOutPort; }
-                    else { prevId = null; prevPort = "execOut"; }
+                    _ = VisitForStatement(nestedFor, prevId, prevPort);
+                    prevId = null;
+                    prevPort = "execOut";
                     continue;
                 }
 
                 if (st is WhileStatementSyntax nestedWhile)
                 {
-                    var wh = VisitWhileStatement(nestedWhile, prevId, prevPort);
-                    if (wh != null) { prevId = wh.NodeId; prevPort = wh.ExecOutPort; }
-                    else { prevId = null; prevPort = "execOut"; }
+                    _ = VisitWhileStatement(nestedWhile, prevId, prevPort);
+                    prevId = null;
+                    prevPort = "execOut";
                     continue;
                 }
 
                 var host = VisitStatementForFlow(st, prevId, prevPort);
                 if (host != null)
                 {
-                    prevId = host.NodeId;
-                    prevPort = host.ExecOutPort;
+                    if (ShouldBreakFlowAfter(host.NodeId))
+                    {
+                        prevId = null;
+                        prevPort = "execOut";
+                    }
+                    else
+                    {
+                        prevId = host.NodeId;
+                        prevPort = host.ExecOutPort;
+                    }
                 }
             }
         }
@@ -881,60 +898,36 @@ namespace VisualScripting.Core.Parsers
             {
                 if (st is IfStatementSyntax nestedIf)
                 {
-                    var ifHost = first
+                    _ = first
                         ? VisitIfChain(nestedIf, entryFromNodeId, entryFromPort)
                         : VisitIfChain(nestedIf, prevId, prevPort);
 
                     first = false;
-                    if (ifHost != null)
-                    {
-                        prevId = ifHost.NodeId;
-                        prevPort = ifHost.ExecOutPort;
-                    }
-                    else
-                    {
-                        prevId = null;
-                        prevPort = "execOut";
-                    }
+                    prevId = null;
+                    prevPort = "execOut";
                     continue;
                 }
 
                 if (st is ForStatementSyntax nestedFor)
                 {
-                    var fh = first
+                    _ = first
                         ? VisitForStatement(nestedFor, entryFromNodeId, entryFromPort)
                         : VisitForStatement(nestedFor, prevId, prevPort);
                     first = false;
-                    if (fh != null)
-                    {
-                        prevId = fh.NodeId;
-                        prevPort = fh.ExecOutPort;
-                    }
-                    else
-                    {
-                        prevId = null;
-                        prevPort = "execOut";
-                    }
+                    prevId = null;
+                    prevPort = "execOut";
 
                     continue;
                 }
 
                 if (st is WhileStatementSyntax nestedWhile)
                 {
-                    var wh = first
+                    _ = first
                         ? VisitWhileStatement(nestedWhile, entryFromNodeId, entryFromPort)
                         : VisitWhileStatement(nestedWhile, prevId, prevPort);
                     first = false;
-                    if (wh != null)
-                    {
-                        prevId = wh.NodeId;
-                        prevPort = wh.ExecOutPort;
-                    }
-                    else
-                    {
-                        prevId = null;
-                        prevPort = "execOut";
-                    }
+                    prevId = null;
+                    prevPort = "execOut";
 
                     continue;
                 }
@@ -943,8 +936,16 @@ namespace VisualScripting.Core.Parsers
                 first = false;
                 if (host != null)
                 {
-                    prevId = host.NodeId;
-                    prevPort = host.ExecOutPort;
+                    if (ShouldBreakFlowAfter(host.NodeId))
+                    {
+                        prevId = null;
+                        prevPort = "execOut";
+                    }
+                    else
+                    {
+                        prevId = host.NodeId;
+                        prevPort = host.ExecOutPort;
+                    }
                 }
             }
         }

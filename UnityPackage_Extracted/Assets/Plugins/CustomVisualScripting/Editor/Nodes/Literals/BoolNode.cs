@@ -20,7 +20,7 @@ namespace CustomVisualScripting.Editor.Nodes.Literals
         [HideInInspector]
         public bool boolValue = true;
 
-        public override string name => string.IsNullOrEmpty(variableName) ? $"Bool: {boolValue}" : $"{variableName} = {boolValue}";
+        public override string name => string.IsNullOrEmpty(variableName) ? $"Bool: {boolValue}" : $"Bool: {variableName} = {boolValue}";
 
         protected override void Process()
         {
