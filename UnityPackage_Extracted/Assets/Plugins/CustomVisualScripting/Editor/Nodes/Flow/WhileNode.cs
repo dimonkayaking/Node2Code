@@ -11,12 +11,27 @@ namespace CustomVisualScripting.Editor.Nodes.Flow
     {
         public override NodeType NodeType => NodeType.FlowWhile;
 
-        [Input("condition")]
-        public bool condition;
+        [HideInInspector]
+        public GraphData conditionSubGraph = new GraphData();
 
-        [Output("body")]
-        public object body;
+        [HideInInspector]
+        public GraphData bodySubGraph = new GraphData();
 
         public override string name => "While Loop";
+
+        public override NodeData ToNodeData()
+        {
+            var data = base.ToNodeData();
+            data.ConditionSubGraph = conditionSubGraph;
+            data.BodySubGraph = bodySubGraph;
+            return data;
+        }
+
+        public override void InitializeFromData(NodeData data)
+        {
+            base.InitializeFromData(data);
+            conditionSubGraph = data.ConditionSubGraph ?? new GraphData();
+            bodySubGraph = data.BodySubGraph ?? new GraphData();
+        }
     }
 }

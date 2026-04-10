@@ -509,26 +509,28 @@ namespace VisualScripting.Core.Parsers
         private FlowHost VisitForStatement(ForStatementSyntax forStmt, string prevNode, string prevPort)
         {
             var forId = NewId();
-            _graph.Nodes.Add(new NodeData
+            var forNodeData = new NodeData
             {
                 Id = forId,
                 Type = NodeType.FlowFor,
                 Value = "",
                 ValueType = "",
                 VariableName = ""
-            });
+            };
 
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, forId, "execIn");
 
             VisitForInitialization(forStmt, forId);
 
+            var condGraph = new GraphData();
             if (forStmt.Condition != null)
             {
-                var condRoot = VisitExpression(forStmt.Condition, false, null, out var badCond);
-                if (!badCond && condRoot != null)
-                    AddEdge(condRoot, GetDataOutPortForNodeId(condRoot), forId, "condition");
+                PushSubGraph(condGraph);
+                VisitExpression(forStmt.Condition, false, null, out _);
+                PopSubGraph();
             }
+            forNodeData.ConditionSubGraph = condGraph;
 
             foreach (var inc in forStmt.Incrementors)
             {
@@ -537,8 +539,14 @@ namespace VisualScripting.Core.Parsers
                     AddEdge(incRoot, GetDataOutPortForNodeId(incRoot), forId, "increment");
             }
 
+            var bodyGraph = new GraphData();
+            PushSubGraph(bodyGraph);
             var bodyStmts = ExpandStatement(forStmt.Statement);
-            ProcessBlockStatements(bodyStmts, forId, "body");
+            BuildStatementsInSubGraph(bodyStmts);
+            PopSubGraph();
+            forNodeData.BodySubGraph = bodyGraph;
+
+            _graph.Nodes.Add(forNodeData);
 
             return new FlowHost { NodeId = forId, ExecOutPort = "execOut" };
         }
@@ -665,24 +673,32 @@ namespace VisualScripting.Core.Parsers
         private FlowHost VisitWhileStatement(WhileStatementSyntax whileStmt, string prevNode, string prevPort)
         {
             var whileId = NewId();
-            _graph.Nodes.Add(new NodeData
+            var whileNodeData = new NodeData
             {
                 Id = whileId,
                 Type = NodeType.FlowWhile,
                 Value = "",
                 ValueType = "",
                 VariableName = ""
-            });
+            };
 
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, whileId, "execIn");
 
-            var condRoot = VisitExpression(whileStmt.Condition, false, null, out var badCond);
-            if (!badCond && condRoot != null)
-                AddEdge(condRoot, GetDataOutPortForNodeId(condRoot), whileId, "condition");
+            var condGraph = new GraphData();
+            PushSubGraph(condGraph);
+            VisitExpression(whileStmt.Condition, false, null, out _);
+            PopSubGraph();
+            whileNodeData.ConditionSubGraph = condGraph;
 
+            var bodyGraph = new GraphData();
+            PushSubGraph(bodyGraph);
             var bodyStmts = ExpandStatement(whileStmt.Statement);
-            ProcessBlockStatements(bodyStmts, whileId, "body");
+            BuildStatementsInSubGraph(bodyStmts);
+            PopSubGraph();
+            whileNodeData.BodySubGraph = bodyGraph;
+
+            _graph.Nodes.Add(whileNodeData);
 
             return new FlowHost { NodeId = whileId, ExecOutPort = "execOut" };
         }

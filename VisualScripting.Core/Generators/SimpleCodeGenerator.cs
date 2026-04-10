@@ -347,16 +347,32 @@ namespace VisualScripting.Core.Generators
         {
             var pad = Pad(indent);
             var initStr = EmitForInitClause(forNode.Id);
-            var condEdge = _graph.Edges.FirstOrDefault(
-                e => e.ToNodeId == forNode.Id && e.ToPort == "condition");
-            var condStr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "";
+            var condStr = "";
+            if (forNode.ConditionSubGraph != null && forNode.ConditionSubGraph.Nodes.Count > 0)
+            {
+                condStr = GenerateExpressionFromSubGraph(forNode.ConditionSubGraph);
+            }
+            else
+            {
+                var condEdge = _graph.Edges.FirstOrDefault(
+                    e => e.ToNodeId == forNode.Id && e.ToPort == "condition");
+                condStr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "";
+            }
+
             var incStr = EmitForIncrementClause(forNode.Id);
             sb.AppendLine($"{pad}for ({initStr}; {condStr}; {incStr})");
             sb.AppendLine($"{pad}{{");
-            var bodyEdge = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == forNode.Id && e.FromPort == "body");
-            if (bodyEdge != null)
-                EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+            if (forNode.BodySubGraph != null && forNode.BodySubGraph.Nodes.Count > 0)
+            {
+                GenerateStatementsFromSubGraph(forNode.BodySubGraph, sb, indent + 1);
+            }
+            else
+            {
+                var bodyEdge = _graph.Edges.FirstOrDefault(
+                    e => e.FromNodeId == forNode.Id && e.FromPort == "body");
+                if (bodyEdge != null)
+                    EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+            }
             sb.AppendLine($"{pad}}}");
         }
 
@@ -419,15 +435,31 @@ namespace VisualScripting.Core.Generators
         private void EmitWhile(NodeData whileNode, StringBuilder sb, int indent)
         {
             var pad = Pad(indent);
-            var condEdge = _graph.Edges.FirstOrDefault(
-                e => e.ToNodeId == whileNode.Id && e.ToPort == "condition");
-            var condStr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "true";
+            var condStr = "true";
+            if (whileNode.ConditionSubGraph != null && whileNode.ConditionSubGraph.Nodes.Count > 0)
+            {
+                condStr = GenerateExpressionFromSubGraph(whileNode.ConditionSubGraph);
+            }
+            else
+            {
+                var condEdge = _graph.Edges.FirstOrDefault(
+                    e => e.ToNodeId == whileNode.Id && e.ToPort == "condition");
+                condStr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "true";
+            }
+
             sb.AppendLine($"{pad}while ({condStr})");
             sb.AppendLine($"{pad}{{");
-            var bodyEdge = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == whileNode.Id && e.FromPort == "body");
-            if (bodyEdge != null)
-                EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+            if (whileNode.BodySubGraph != null && whileNode.BodySubGraph.Nodes.Count > 0)
+            {
+                GenerateStatementsFromSubGraph(whileNode.BodySubGraph, sb, indent + 1);
+            }
+            else
+            {
+                var bodyEdge = _graph.Edges.FirstOrDefault(
+                    e => e.FromNodeId == whileNode.Id && e.FromPort == "body");
+                if (bodyEdge != null)
+                    EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
+            }
             sb.AppendLine($"{pad}}}");
         }
 
