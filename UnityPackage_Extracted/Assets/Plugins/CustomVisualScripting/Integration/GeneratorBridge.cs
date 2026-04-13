@@ -20,8 +20,21 @@ namespace CustomVisualScripting.Integration
                 Debug.LogError("[VS] GraphData пуст");
                 return "";
             }
-            
+
+            NormalizePorts(graph);
             return _generator.Generate(graph);
+        }
+
+        private static void NormalizePorts(GraphData graph)
+        {
+            if (graph?.Edges == null)
+                return;
+
+            foreach (var edge in graph.Edges)
+            {
+                edge.FromPort = PortIds.Normalize(edge.FromPort);
+                edge.ToPort = PortIds.Normalize(edge.ToPort);
+            }
         }
     }
 }

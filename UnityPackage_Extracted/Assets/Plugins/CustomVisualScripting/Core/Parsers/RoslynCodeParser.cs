@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -98,7 +99,7 @@ namespace VisualScripting.Core.Parsers
         private void VisitMethodBody(BlockSyntax body)
         {
             string prevFlowNode = null;
-            var prevFlowPort = "execOut";
+            var prevFlowPort = PortIds.ExecOut;
 
             foreach (var stmt in body.Statements)
             {
@@ -113,7 +114,7 @@ namespace VisualScripting.Core.Parsers
                     else
                     {
                         prevFlowNode = null;
-                        prevFlowPort = "execOut";
+                        prevFlowPort = PortIds.ExecOut;
                     }
                 }
                 else if (stmt is ForStatementSyntax forStmt)
@@ -159,7 +160,7 @@ namespace VisualScripting.Core.Parsers
         private sealed class FlowHost
         {
             public string NodeId { get; set; } = "";
-            public string ExecOutPort { get; set; } = "execOut";
+            public string ExecOutPort { get; set; } = PortIds.ExecOut;
         }
 
         private FlowHost VisitStatementForFlow(StatementSyntax stmt, string prevNode, string prevPort)
@@ -240,9 +241,9 @@ namespace VisualScripting.Core.Parsers
 
                     var declHost = new FlowHost { NodeId = declId };
                     if (last != null)
-                        AddEdge(last.NodeId, last.ExecOutPort, declHost.NodeId, "execIn");
+                        AddEdge(last.NodeId, last.ExecOutPort, declHost.NodeId, PortIds.ExecIn);
                     else if (prevNode != null)
-                        AddEdge(prevNode, prevPort, declHost.NodeId, "execIn");
+                        AddEdge(prevNode, prevPort, declHost.NodeId, PortIds.ExecIn);
                     last = declHost;
                     continue;
                 }
@@ -277,9 +278,9 @@ namespace VisualScripting.Core.Parsers
 
                 var host = new FlowHost { NodeId = litId };
                 if (last != null)
-                    AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, "execIn");
+                    AddEdge(last.NodeId, last.ExecOutPort, host.NodeId, PortIds.ExecIn);
                 else if (prevNode != null)
-                    AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+                    AddEdge(prevNode, prevPort, host.NodeId, PortIds.ExecIn);
 
                 last = host;
             }
@@ -327,7 +328,7 @@ namespace VisualScripting.Core.Parsers
 
                     var host = new FlowHost { NodeId = litId };
                     if (prevNode != null)
-                        AddEdge(prevNode, prevPort, host.NodeId, "execIn");
+                        AddEdge(prevNode, prevPort, host.NodeId, PortIds.ExecIn);
                     return host;
                 }
 
@@ -400,7 +401,7 @@ namespace VisualScripting.Core.Parsers
             AddEdge(msgId, GetDataOutPortForNodeId(msgId), nodeId, "message");
 
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, nodeId, "execIn");
+                AddEdge(prevNode, prevPort, nodeId, PortIds.ExecIn);
 
             return new FlowHost { NodeId = nodeId };
         }
@@ -492,7 +493,7 @@ namespace VisualScripting.Core.Parsers
 
             var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, litId, "execIn");
+                AddEdge(prevNode, prevPort, litId, PortIds.ExecIn);
             return host;
         }
 
@@ -541,7 +542,7 @@ namespace VisualScripting.Core.Parsers
 
             var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, litId, "execIn");
+                AddEdge(prevNode, prevPort, litId, PortIds.ExecIn);
             return host;
         }
 
@@ -558,7 +559,7 @@ namespace VisualScripting.Core.Parsers
             };
 
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, forId, "execIn");
+                AddEdge(prevNode, prevPort, forId, PortIds.ExecIn);
 
             VisitForInitialization(forStmt, forId);
 
@@ -587,7 +588,7 @@ namespace VisualScripting.Core.Parsers
 
             _graph.Nodes.Add(forNodeData);
 
-            return new FlowHost { NodeId = forId, ExecOutPort = "execOut" };
+            return new FlowHost { NodeId = forId, ExecOutPort = PortIds.ExecOut };
         }
 
         private void VisitForInitialization(ForStatementSyntax forStmt, string forId)
@@ -716,7 +717,7 @@ namespace VisualScripting.Core.Parsers
             };
 
             if (prevNode != null)
-                AddEdge(prevNode, prevPort, whileId, "execIn");
+                AddEdge(prevNode, prevPort, whileId, PortIds.ExecIn);
 
             var condGraph = new GraphData();
             PushSubGraph(condGraph);
@@ -733,7 +734,7 @@ namespace VisualScripting.Core.Parsers
 
             _graph.Nodes.Add(whileNodeData);
 
-            return new FlowHost { NodeId = whileId, ExecOutPort = "execOut" };
+            return new FlowHost { NodeId = whileId, ExecOutPort = PortIds.ExecOut };
         }
 
         private FlowHost VisitIfChain(IfStatementSyntax stmt, string incomingNodeId, string incomingPort)
@@ -764,13 +765,13 @@ namespace VisualScripting.Core.Parsers
             _graph.Nodes.Add(ifNodeData);
 
             if (incomingNodeId != null && incomingPort != null)
-                AddEdge(incomingNodeId, incomingPort, ifNodeId, "execIn");
+                AddEdge(incomingNodeId, incomingPort, ifNodeId, PortIds.ExecIn);
 
             if (stmt.Else != null)
             {
                 if (stmt.Else.Statement is IfStatementSyntax elseIf)
                 {
-                    VisitIfChain(elseIf, ifNodeId, "falseBranch");
+                    VisitIfChain(elseIf, ifNodeId, PortIds.FalseBranch);
                 }
                 else
                 {
@@ -792,11 +793,11 @@ namespace VisualScripting.Core.Parsers
                     elseNodeData.BodySubGraph = elseBodyGraph;
 
                     _graph.Nodes.Add(elseNodeData);
-                    AddEdge(ifNodeId, "falseBranch", elseNodeId, "execIn");
+                    AddEdge(ifNodeId, PortIds.FalseBranch, elseNodeId, PortIds.ExecIn);
                 }
             }
 
-            return new FlowHost { NodeId = ifNodeId, ExecOutPort = "execOut" };
+            return new FlowHost { NodeId = ifNodeId, ExecOutPort = PortIds.ExecOut };
         }
 
         private void PushSubGraph(GraphData target)
@@ -818,7 +819,7 @@ namespace VisualScripting.Core.Parsers
         private void BuildStatementsInSubGraph(IReadOnlyList<StatementSyntax> statements)
         {
             string prevId = null;
-            var prevPort = "execOut";
+            var prevPort = PortIds.ExecOut;
 
             foreach (var st in statements)
             {
@@ -833,7 +834,7 @@ namespace VisualScripting.Core.Parsers
                     else
                     {
                         prevId = null;
-                        prevPort = "execOut";
+                        prevPort = PortIds.ExecOut;
                     }
                     continue;
                 }
@@ -842,7 +843,7 @@ namespace VisualScripting.Core.Parsers
                 {
                     var fh = VisitForStatement(nestedFor, prevId, prevPort);
                     if (fh != null) { prevId = fh.NodeId; prevPort = fh.ExecOutPort; }
-                    else { prevId = null; prevPort = "execOut"; }
+                    else { prevId = null; prevPort = PortIds.ExecOut; }
                     continue;
                 }
 
@@ -850,7 +851,7 @@ namespace VisualScripting.Core.Parsers
                 {
                     var wh = VisitWhileStatement(nestedWhile, prevId, prevPort);
                     if (wh != null) { prevId = wh.NodeId; prevPort = wh.ExecOutPort; }
-                    else { prevId = null; prevPort = "execOut"; }
+                    else { prevId = null; prevPort = PortIds.ExecOut; }
                     continue;
                 }
 
@@ -905,7 +906,7 @@ namespace VisualScripting.Core.Parsers
             string entryFromPort)
         {
             string prevId = null;
-            var prevPort = "execOut";
+            var prevPort = PortIds.ExecOut;
             var first = true;
 
             foreach (var st in statements)
@@ -925,7 +926,7 @@ namespace VisualScripting.Core.Parsers
                     else
                     {
                         prevId = null;
-                        prevPort = "execOut";
+                        prevPort = PortIds.ExecOut;
                     }
                     continue;
                 }
@@ -944,7 +945,7 @@ namespace VisualScripting.Core.Parsers
                     else
                     {
                         prevId = null;
-                        prevPort = "execOut";
+                        prevPort = PortIds.ExecOut;
                     }
 
                     continue;
@@ -964,7 +965,7 @@ namespace VisualScripting.Core.Parsers
                     else
                     {
                         prevId = null;
-                        prevPort = "execOut";
+                        prevPort = PortIds.ExecOut;
                     }
 
                     continue;
@@ -1436,13 +1437,48 @@ namespace VisualScripting.Core.Parsers
 
         private void AddEdge(string fromId, string fromPort, string toId, string toPort)
         {
+            var normalizedFrom = PortIds.Normalize(fromPort);
+            var normalizedTo = PortIds.Normalize(toPort);
+
+            if (PortIds.IsExecOut(normalizedFrom) || PortIds.IsFalseBranch(normalizedFrom))
+            {
+                if (!SupportsExecOut(fromId))
+                    return;
+            }
+
+            if (PortIds.IsExecIn(normalizedTo))
+            {
+                if (!SupportsExecIn(toId))
+                    return;
+            }
+
             _graph.Edges.Add(new EdgeData
             {
                 FromNodeId = fromId,
-                FromPort = fromPort,
+                FromPort = normalizedFrom,
                 ToNodeId = toId,
-                ToPort = toPort
+                ToPort = normalizedTo
             });
+        }
+
+        private bool SupportsExecOut(string nodeId)
+        {
+            var node = _graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (node == null)
+                return false;
+
+            return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
+                or NodeType.ConsoleWriteLine;
+        }
+
+        private bool SupportsExecIn(string nodeId)
+        {
+            var node = _graph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (node == null)
+                return false;
+
+            return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
+                or NodeType.ConsoleWriteLine;
         }
 
         private string NewId() => $"node_{_nodeCounter++}";

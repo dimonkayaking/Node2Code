@@ -22,11 +22,24 @@ namespace CustomVisualScripting.Integration
             }
 
             var result = _parser.Parse(code);
+            NormalizePorts(result.Graph);
             if (result.HasErrors)
                 Debug.LogWarning($"[VS] Parse: ошибок={result.Errors.Count}");
             else
                 Debug.Log($"[VS] Parse OK: Nodes={result.Graph.Nodes.Count}, Edges={result.Graph.Edges.Count}");
             return result;
+        }
+
+        private static void NormalizePorts(GraphData graph)
+        {
+            if (graph?.Edges == null)
+                return;
+
+            foreach (var edge in graph.Edges)
+            {
+                edge.FromPort = PortIds.Normalize(edge.FromPort);
+                edge.ToPort = PortIds.Normalize(edge.ToPort);
+            }
         }
     }
 }

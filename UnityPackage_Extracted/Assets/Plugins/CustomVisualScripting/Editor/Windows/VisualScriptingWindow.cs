@@ -301,100 +301,105 @@ namespace CustomVisualScripting.Editor.Windows
         }
         
         private void SyncFullGraphFromView()
-{
-    if (_graphView == null || _internalGraph == null) return;
-    
-    _currentGraph.LogicGraph.Nodes.Clear();
-    _currentGraph.LogicGraph.Edges.Clear();
+        {
+            if (_graphView == null || _internalGraph == null) return;
 
-    var graphNodes = _internalGraph.nodes.OfType<CustomBaseNode>().ToList();
-    var validNodeIds = new HashSet<string>();
+            _currentGraph.LogicGraph.Nodes.Clear();
+            _currentGraph.LogicGraph.Edges.Clear();
 
-    foreach (var customNode in graphNodes)
-    {
-        var nodeData = customNode.ToNodeData();
-        nodeData.Id = customNode.NodeId;
-        nodeData.VariableName = customNode.variableName;
+            var graphNodes = _internalGraph.nodes.OfType<CustomBaseNode>().ToList();
+            var validNodeIds = new HashSet<string>();
 
-        if (customNode is IntNode intNode)
-        {
-            nodeData.Value = intNode.intValue.ToString();
-            nodeData.ExpressionOverride = intNode.expressionOverride;
-        }
-        else if (customNode is FloatNode floatNode)
-        {
-            nodeData.Value = floatNode.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            nodeData.ExpressionOverride = floatNode.expressionOverride;
-        }
-        else if (customNode is BoolNode boolNode)
-        {
-            nodeData.Value = boolNode.boolValue.ToString();
-            nodeData.ExpressionOverride = boolNode.expressionOverride;
-        }
-        else if (customNode is StringNode stringNode)
-        {
-            nodeData.Value = stringNode.stringValue;
-            nodeData.ExpressionOverride = stringNode.expressionOverride;
-        }
-        else if (customNode is ConsoleWriteLineNode cwlNode)
-        {
-            nodeData.Value = cwlNode.messageText;
-        }
+            foreach (var customNode in graphNodes)
+            {
+                var nodeData = customNode.ToNodeData();
+                nodeData.Id = customNode.NodeId;
+                nodeData.VariableName = customNode.variableName;
 
-        if (customNode is IfNode ifNode)
-        {
-            nodeData.ConditionSubGraph = ifNode.conditionSubGraph;
-            nodeData.BodySubGraph = ifNode.bodySubGraph;
-        }
-        else if (customNode is ElseNode elseNode)
-        {
-            nodeData.BodySubGraph = elseNode.bodySubGraph;
-        }
-        else if (customNode is ForNode forNode)
-        {
-            nodeData.ConditionSubGraph = forNode.conditionSubGraph;
-            nodeData.BodySubGraph = forNode.bodySubGraph;
-        }
-        else if (customNode is WhileNode whileNode)
-        {
-            nodeData.ConditionSubGraph = whileNode.conditionSubGraph;
-            nodeData.BodySubGraph = whileNode.bodySubGraph;
-        }
+                if (customNode is IntNode intNode)
+                {
+                    nodeData.Value = intNode.intValue.ToString();
+                    nodeData.ExpressionOverride = intNode.expressionOverride;
+                }
+                else if (customNode is FloatNode floatNode)
+                {
+                    nodeData.Value = floatNode.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    nodeData.ExpressionOverride = floatNode.expressionOverride;
+                }
+                else if (customNode is BoolNode boolNode)
+                {
+                    nodeData.Value = boolNode.boolValue.ToString();
+                    nodeData.ExpressionOverride = boolNode.expressionOverride;
+                }
+                else if (customNode is StringNode stringNode)
+                {
+                    nodeData.Value = stringNode.stringValue;
+                    nodeData.ExpressionOverride = stringNode.expressionOverride;
+                }
+                else if (customNode is ConsoleWriteLineNode cwlNode)
+                {
+                    nodeData.Value = cwlNode.messageText;
+                }
 
-        _currentGraph.LogicGraph.Nodes.Add(nodeData);
-        validNodeIds.Add(customNode.NodeId);
-    }
-    
-    foreach (var edgeView in _graphView.edgeViews)
-    {
-        if (edgeView == null) continue;
-        
-        var fromPort = edgeView.output as PortView;
-        var toPort = edgeView.input as PortView;
-        
-        if (fromPort == null || toPort == null) continue;
-        
-        var fromNode = fromPort.owner.nodeTarget as CustomBaseNode;
-        var toNode = toPort.owner.nodeTarget as CustomBaseNode;
-        
-        if (fromNode == null || toNode == null) continue;
-        if (!validNodeIds.Contains(fromNode.NodeId) || !validNodeIds.Contains(toNode.NodeId)) continue;
-        
-        Debug.Log($"[VS] Сохраняем связь: {fromNode.NodeId}.{fromPort.fieldName} → {toNode.NodeId}.{toPort.fieldName}");
-        
-        var canonicalToPort = CanonicalPortIdForStorage(toPort);
-        _currentGraph.LogicGraph.Edges.Add(new EdgeData
-        {
-            FromNodeId = fromNode.NodeId,
-            FromPort = CanonicalFromPortIdForStorage(fromPort, fromNode, toNode, canonicalToPort),
-            ToNodeId = toNode.NodeId,
-            ToPort = canonicalToPort
-        });
-    }
-    
-    SaveVisualNodePositions();
-    _hasUnsavedChanges = true;
-}
+                if (customNode is IfNode ifNode)
+                {
+                    nodeData.ConditionSubGraph = ifNode.conditionSubGraph;
+                    nodeData.BodySubGraph = ifNode.bodySubGraph;
+                }
+                else if (customNode is ElseNode elseNode)
+                {
+                    nodeData.BodySubGraph = elseNode.bodySubGraph;
+                }
+                else if (customNode is ForNode forNode)
+                {
+                    nodeData.ConditionSubGraph = forNode.conditionSubGraph;
+                    nodeData.BodySubGraph = forNode.bodySubGraph;
+                }
+                else if (customNode is WhileNode whileNode)
+                {
+                    nodeData.ConditionSubGraph = whileNode.conditionSubGraph;
+                    nodeData.BodySubGraph = whileNode.bodySubGraph;
+                }
+
+                _currentGraph.LogicGraph.Nodes.Add(nodeData);
+                validNodeIds.Add(customNode.NodeId);
+            }
+
+            foreach (var edgeView in _graphView.edgeViews)
+            {
+                if (edgeView == null) continue;
+
+                var fromPort = edgeView.output as PortView;
+                var toPort = edgeView.input as PortView;
+
+                if (fromPort == null || toPort == null) continue;
+                if (fromPort.direction != Direction.Output || toPort.direction != Direction.Input) continue;
+
+                var fromNode = fromPort.owner.nodeTarget as CustomBaseNode;
+                var toNode = toPort.owner.nodeTarget as CustomBaseNode;
+
+                if (fromNode == null || toNode == null) continue;
+                if (!validNodeIds.Contains(fromNode.NodeId) || !validNodeIds.Contains(toNode.NodeId)) continue;
+
+                Debug.Log($"[VS] Сохраняем связь: {fromNode.NodeId}.{fromPort.fieldName} → {toNode.NodeId}.{toPort.fieldName}");
+
+                var canonicalFrom = CanonicalFromPortIdForStorage(fromPort, fromNode, toNode, CanonicalPortIdForStorage(toPort));
+                var canonicalTo = CanonicalPortIdForStorage(toPort);
+                if (string.IsNullOrEmpty(canonicalFrom) || string.IsNullOrEmpty(canonicalTo))
+                    continue;
+
+                _currentGraph.LogicGraph.Edges.Add(new EdgeData
+                {
+                    FromNodeId = fromNode.NodeId,
+                    FromPort = canonicalFrom,
+                    ToNodeId = toNode.NodeId,
+                    ToPort = canonicalTo
+                });
+            }
+
+            SaveVisualNodePositions();
+            _hasUnsavedChanges = true;
+        }
         
         private void SaveVisualNodePositions()
         {
@@ -435,6 +440,8 @@ namespace CustomVisualScripting.Editor.Windows
                         {
                             node.NodeId = nodeData.Id;
                             node.InitializeFromData(nodeData);
+                            if (node.GUID != node.NodeId)
+                                node.SetGUID(node.NodeId);
                             
                             if (node is IntNode intNode && int.TryParse(nodeData.Value, out int intVal))
                                 intNode.intValue = intVal;
@@ -492,15 +499,6 @@ namespace CustomVisualScripting.Editor.Windows
                         var fromPort = fromNodeView.outputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.FromPort));
                         var toPort = toNodeView.inputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.ToPort));
 
-                        if (fromPort == null && fromNode is IfNode &&
-                            (string.Equals(NormalizePortId(edgeData.FromPort), "execOut", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(NormalizePortId(edgeData.FromPort), "falseBranch", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            fromPort = fromNodeView.outputPortViews.FirstOrDefault(p =>
-                                string.Equals(NormalizePortId(p.fieldName), "falseBranch", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(NormalizePortId(p.portName), "falseBranch", StringComparison.OrdinalIgnoreCase));
-                        }
-                        
                         if (fromPort == null)
                         {
                             Debug.LogWarning($"[VS] Не найден выходной порт: '{edgeData.FromPort}' в ноде {fromNode.GetType().Name}. Доступные: {string.Join(", ", fromNodeView.outputPortViews.Select(p => p.fieldName))}");
@@ -509,6 +507,12 @@ namespace CustomVisualScripting.Editor.Windows
                         if (toPort == null)
                         {
                             Debug.LogWarning($"[VS] Не найден входной порт: '{edgeData.ToPort}' в ноде {toNode.GetType().Name}. Доступные: {string.Join(", ", toNodeView.inputPortViews.Select(p => p.fieldName))}");
+                            continue;
+                        }
+
+                        if (fromPort.direction != Direction.Output || toPort.direction != Direction.Input)
+                        {
+                            Debug.LogWarning($"[VS] Пропуск связи из-за направления портов: {fromNode.GetType().Name}.{fromPort.fieldName}({fromPort.direction}) -> {toNode.GetType().Name}.{toPort.fieldName}({toPort.direction})");
                             continue;
                         }
                         
@@ -524,7 +528,7 @@ namespace CustomVisualScripting.Editor.Windows
                         
                         if (!alreadyConnected)
                         {
-                            _graphView.Connect(fromPort, toPort);
+                            _graphView.Connect(toPort, fromPort);
                             Debug.Log($"[VS] Связь создана: {edgeData.FromNodeId}.{edgeData.FromPort} → {edgeData.ToNodeId}.{edgeData.ToPort}");
                         }
                     }
@@ -623,17 +627,7 @@ namespace CustomVisualScripting.Editor.Windows
         /// </summary>
         private static string CanonicalFromPortIdForStorage(PortView port, CustomBaseNode fromNode, CustomBaseNode toNode, string canonicalToPort)
         {
-            var id = CanonicalPortIdForStorage(port);
-
-            // If-node fallback output should map to false branch only when the link clearly
-            // points into branch-control flow (If/Else exec input), not for arbitrary exec edges.
-            if (fromNode is IfNode &&
-                (toNode is IfNode || toNode is ElseNode) &&
-                string.Equals(canonicalToPort, "execIn", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(id, "execOut", StringComparison.OrdinalIgnoreCase))
-                return "falseBranch";
-
-            return id;
+            return CanonicalPortIdForStorage(port);
         }
 
         private static bool IsPortMatchForStorage(PortView port, string savedPortId)
@@ -670,29 +664,16 @@ namespace CustomVisualScripting.Editor.Windows
 
             // Fallback for legacy/unnamed execution ports.
             if (port.direction == Direction.Input)
-                return "execIn";
+                return PortIds.ExecIn;
             if (port.direction == Direction.Output)
-                return "execOut";
+                return PortIds.ExecOut;
 
             return "";
         }
 
         private static string NormalizePortId(string rawPortId)
         {
-            if (string.IsNullOrWhiteSpace(rawPortId))
-                return "";
-
-            var id = rawPortId.Trim();
-            if (string.Equals(id, "execIn", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, "exec", StringComparison.OrdinalIgnoreCase))
-                return "execIn";
-            if (string.Equals(id, "execOut", StringComparison.OrdinalIgnoreCase))
-                return "execOut";
-            if (string.Equals(id, "false", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(id, "falseBranch", StringComparison.OrdinalIgnoreCase))
-                return "falseBranch";
-
-            return id;
+            return PortIds.Normalize(rawPortId);
         }
         
         private void OnDestroy()

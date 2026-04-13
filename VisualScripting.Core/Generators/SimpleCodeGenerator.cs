@@ -247,7 +247,7 @@ namespace VisualScripting.Core.Generators
             if (!string.IsNullOrEmpty(node.VariableName)) return node.VariableName;
             if (IsLiteral(node.Type)) return LiteralRhs(node);
 
-            string SubIn(string port) =>
+            string? SubIn(string port) =>
                 graph.Edges.FirstOrDefault(e => e.ToNodeId == nodeId && e.ToPort == port)?.FromNodeId;
 
             if (IsMath(node.Type))

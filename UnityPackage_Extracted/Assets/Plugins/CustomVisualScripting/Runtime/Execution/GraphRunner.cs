@@ -30,7 +30,7 @@ namespace CustomVisualScripting.Runtime.Execution
                 var hasIncomingExec = new HashSet<string>();
                 foreach (var edge in graph.Edges)
                 {
-                    if (edge.ToPort == "execIn")
+                    if (PortIds.IsExecIn(edge.ToPort))
                         hasIncomingExec.Add(edge.ToNodeId);
                 }
 
@@ -74,7 +74,7 @@ namespace CustomVisualScripting.Runtime.Execution
             {
                 ExecuteSubGraph(node.BodySubGraph);
                 var execOutEdge = graph.Edges.FirstOrDefault(
-                    e => e.FromNodeId == nodeId && e.FromPort == "execOut");
+                    e => e.FromNodeId == nodeId && PortIds.IsExecOut(e.FromPort));
                 if (execOutEdge != null)
                     ExecuteFlow(execOutEdge.ToNodeId, graph);
                 return;
@@ -112,7 +112,7 @@ namespace CustomVisualScripting.Runtime.Execution
                     ExecuteSubGraph(node.BodySubGraph);
 
                 var execOutEdge = graph.Edges.FirstOrDefault(
-                    e => e.FromNodeId == node.Id && e.FromPort == "execOut");
+                    e => e.FromNodeId == node.Id && PortIds.IsExecOut(e.FromPort));
                 if (execOutEdge != null)
                     ExecuteFlow(execOutEdge.ToNodeId, graph);
             }
@@ -120,8 +120,7 @@ namespace CustomVisualScripting.Runtime.Execution
             {
                 var falseEdge = graph.Edges.FirstOrDefault(
                     e => e.FromNodeId == node.Id &&
-                         (string.Equals(e.FromPort, "false", StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(e.FromPort, "falseBranch", StringComparison.OrdinalIgnoreCase)));
+                         PortIds.IsFalseBranch(e.FromPort));
 
                 if (falseEdge != null)
                 {
@@ -129,7 +128,7 @@ namespace CustomVisualScripting.Runtime.Execution
                 }
 
                 var execOutEdge = graph.Edges.FirstOrDefault(
-                    e => e.FromNodeId == node.Id && e.FromPort == "execOut");
+                    e => e.FromNodeId == node.Id && PortIds.IsExecOut(e.FromPort));
                 if (execOutEdge != null)
                     ExecuteFlow(execOutEdge.ToNodeId, graph);
             }
@@ -175,7 +174,7 @@ namespace CustomVisualScripting.Runtime.Execution
             var hasIncomingExec = new HashSet<string>();
             foreach (var edge in subGraph.Edges)
             {
-                if (edge.ToPort == "execIn")
+                if (PortIds.IsExecIn(edge.ToPort))
                     hasIncomingExec.Add(edge.ToNodeId);
             }
 

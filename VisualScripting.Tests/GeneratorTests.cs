@@ -647,12 +647,60 @@ while (count > 0)
     {
         var code = @"
 int x = 10;
-int y = 20;";
+if (x > 0)
+{
+    Console.WriteLine(x);
+}";
         var result = _parser.Parse(code);
         Assert.False(result.HasErrors, string.Join("\n", result.Errors));
 
-        var execEdges = result.Graph.Edges.Where(e => e.ToPort == "execIn" || e.FromPort == "execOut").ToList();
-        Assert.True(execEdges.Count > 0, "Parser should create execution flow edges between statements");
+        var execEdges = result.Graph.Edges
+            .Where(e => PortIds.IsExecIn(e.ToPort) || PortIds.IsExecOut(e.FromPort) || PortIds.IsFalseBranch(e.FromPort))
+            .ToList();
+        Assert.True(execEdges.Count > 0, "Parser should create execution flow edges for flow nodes");
+    }
+
+    [Fact]
+    public void ParserUsesCanonicalExecPortIds()
+    {
+        var code = @"
+int x = 10;
+if (x > 3)
+{
+    x = x + 1;
+}";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        Assert.All(result.Graph.Edges.Where(e => PortIds.IsExecIn(e.ToPort)),
+            e => Assert.Equal(PortIds.ExecIn, PortIds.Normalize(e.ToPort)));
+        Assert.All(result.Graph.Edges.Where(e => PortIds.IsExecOut(e.FromPort) || PortIds.IsFalseBranch(e.FromPort)),
+            e => Assert.True(e.FromPort == PortIds.ExecOut || e.FromPort == PortIds.FalseBranch));
+    }
+
+    [Fact]
+    public void GeneratorRestoresElseIfFromFalseBranchOnly()
+    {
+        var code = @"
+int number = 1;
+if (number > 1)
+{
+    number = 10;
+}
+else if (number < 0)
+{
+    number = 10;
+}
+else
+{
+    number = 0;
+}";
+
+        var parsed = _parser.Parse(code);
+        Assert.False(parsed.HasErrors, string.Join("\n", parsed.Errors));
+
+        var generated = _generator.Generate(parsed.Graph).Replace("\r", "");
+        Assert.Contains("else if (number < 0)", generated);
     }
 
     [Fact]

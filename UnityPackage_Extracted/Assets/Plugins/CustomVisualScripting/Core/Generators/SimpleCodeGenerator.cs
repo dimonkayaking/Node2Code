@@ -317,7 +317,7 @@ namespace VisualScripting.Core.Generators
             if (!string.IsNullOrEmpty(node.VariableName)) return node.VariableName;
             if (IsLiteral(node.Type)) return LiteralRhs(node);
 
-            string SubIn(string port) =>
+            string? SubIn(string port) =>
                 graph.Edges.FirstOrDefault(e => e.ToNodeId == nodeId && e.ToPort == port)?.FromNodeId;
 
             if (IsMath(node.Type))
@@ -778,10 +778,7 @@ namespace VisualScripting.Core.Generators
         {
             if (string.IsNullOrEmpty(fromPort))
                 return false;
-            if (fromPort == "false" || fromPort == "falseBranch")
-                return true;
-            return string.Equals(fromPort, "false", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(fromPort, "falseBranch", StringComparison.OrdinalIgnoreCase);
+            return PortIds.IsFalseBranch(fromPort);
         }
 
         /// <summary>
@@ -823,18 +820,13 @@ namespace VisualScripting.Core.Generators
         private static bool IsExecInPort(string? toPort)
         {
             if (string.IsNullOrEmpty(toPort)) return false;
-            var t = toPort.Trim();
-            return t == "execIn"
-                || t == "exec"
-                || string.Equals(t, "execIn", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(t, "exec", StringComparison.OrdinalIgnoreCase);
+            return PortIds.IsExecIn(toPort);
         }
 
         private static bool IsExecOutPort(string? fromPort)
         {
             if (string.IsNullOrEmpty(fromPort)) return false;
-            var t = fromPort.Trim();
-            return t == "execOut" || string.Equals(t, "execOut", StringComparison.OrdinalIgnoreCase);
+            return PortIds.IsExecOut(fromPort);
         }
     }
 }
