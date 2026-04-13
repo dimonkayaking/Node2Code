@@ -120,7 +120,8 @@ namespace CustomVisualScripting.Runtime.Execution
             {
                 var falseEdge = graph.Edges.FirstOrDefault(
                     e => e.FromNodeId == node.Id &&
-                         (e.FromPort == "false" || e.FromPort == "falseBranch"));
+                         (string.Equals(e.FromPort, "false", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(e.FromPort, "falseBranch", StringComparison.OrdinalIgnoreCase)));
 
                 if (falseEdge != null)
                 {

@@ -384,9 +384,9 @@ namespace CustomVisualScripting.Editor.Windows
         _currentGraph.LogicGraph.Edges.Add(new EdgeData
         {
             FromNodeId = fromNode.NodeId,
-            FromPort = fromPort.fieldName,
+            FromPort = CanonicalPortIdForStorage(fromPort),
             ToNodeId = toNode.NodeId,
-            ToPort = toPort.fieldName
+            ToPort = CanonicalPortIdForStorage(toPort)
         });
     }
     
@@ -605,6 +605,24 @@ namespace CustomVisualScripting.Editor.Windows
                 case NodeType.UnitySetPosition: return new SetPositionNode();
                 default: return null;
             }
+        }
+
+        /// <summary>
+        /// Единые имена портов в LogicGraph (GraphProcessor может отличаться регистром fieldName / portName).
+        /// </summary>
+        private static string CanonicalPortIdForStorage(PortView port)
+        {
+            var fn = port.fieldName ?? "";
+            if (string.Equals(fn, "execIn", StringComparison.OrdinalIgnoreCase)) return "execIn";
+            if (string.Equals(fn, "execOut", StringComparison.OrdinalIgnoreCase)) return "execOut";
+            if (string.Equals(fn, "falseBranch", StringComparison.OrdinalIgnoreCase)) return "falseBranch";
+
+            var pn = port.portName ?? "";
+            if (string.Equals(pn, "execIn", StringComparison.OrdinalIgnoreCase)) return "execIn";
+            if (string.Equals(pn, "execOut", StringComparison.OrdinalIgnoreCase)) return "execOut";
+            if (string.Equals(pn, "false", StringComparison.OrdinalIgnoreCase)) return "falseBranch";
+
+            return fn;
         }
         
         private void OnDestroy()

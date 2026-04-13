@@ -423,6 +423,63 @@ else
     }
 
     [Fact]
+    public void AgeIfElseIfElseWithConsoleRoundtrip()
+    {
+        var code = @"
+int age = 18;
+
+if (age < 18)
+{
+    Console.WriteLine(""Вы несовершеннолетний"");
+}
+else if (age >= 18 && age < 65)
+{
+    Console.WriteLine(""Вы взрослый"");
+}
+else
+{
+    Console.WriteLine(""Вы пенсионер"");
+}
+";
+        var output = Roundtrip(code);
+        Assert.DoesNotContain("else if (age < 18)", output);
+        Assert.Contains("else if ((age >= 18)", output);
+        Assert.Contains("Вы пенсионер", output);
+    }
+
+    [Fact]
+    public void IfElseIfElse_ShuffledNodeOrder_StillEmitsElseIfChain()
+    {
+        var code = @"
+int x = 10;
+int y = 20;
+int z;
+if (x > y)
+{
+    z = x;
+}
+else if (x == y)
+{
+    z = 0;
+}
+else
+{
+    z = y;
+}";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+        var nodes = result.Graph.Nodes;
+        var ifNodes = nodes.Where(n => n.Type == NodeType.FlowIf).ToList();
+        Assert.Equal(2, ifNodes.Count);
+        nodes.Remove(ifNodes[1]);
+        nodes.Insert(0, ifNodes[1]);
+
+        var output = _generator.Generate(result.Graph);
+        Assert.Contains("else if (x == y)", output);
+        Assert.Contains("z = y;", output);
+    }
+
+    [Fact]
     public void ConsoleWriteLineWithVariable()
     {
         var code = @"

@@ -162,8 +162,14 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 }
             });
 
+            // Пересчёт линий при зуме/панорамировании родительского графа: worldBound − canvasRect
+            // даёт смещение; координаты портов нужно переводить в локальное пространство слоя связей.
+            _canvas.RegisterCallback<GeometryChangedEvent>(_ => ScheduleConnectionDraw());
+
             _content.Add(_canvas);
             Add(_content);
+
+            RegisterCallback<GeometryChangedEvent>(_ => ScheduleConnectionDraw());
         }
 
         private void ToggleExpanded()
@@ -607,9 +613,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 return null;
 
             var rect = el.worldBound;
-            var canvasRect = _canvas.worldBound;
-            if (rect.width < 1 || canvasRect.width < 1) return null;
-            return new Vector2(rect.center.x - canvasRect.x, rect.center.y - canvasRect.y);
+            if (rect.width < 1f || rect.height < 1f)
+                return null;
+
+            return _connectionLayer.WorldToLocal(rect.center);
         }
 
         private static VisualElement CreateLine(Vector2 from, Vector2 to)

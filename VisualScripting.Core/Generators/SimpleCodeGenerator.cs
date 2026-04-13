@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -25,11 +26,12 @@ namespace VisualScripting.Core.Generators
             _emitted = new HashSet<string>();
 
             var hasIncomingExec = new HashSet<string>(
-                graph.Edges.Where(e => e.ToPort == "execIn").Select(e => e.ToNodeId));
+                graph.Edges.Where(e => IsExecInPort(e.ToPort)).Select(e => e.ToNodeId));
 
             // Первая инструкция в методе не имеет входящего execIn; одиночный Console.WriteLine тоже.
             var roots = graph.Nodes
                 .Where(n => !hasIncomingExec.Contains(n.Id) && IsStatementEntryNode(n))
+                .Where(n => !IsChainedElseBranchTarget(n.Id))
                 .ToList();
 
             if (roots.Count == 0)
@@ -100,7 +102,7 @@ namespace VisualScripting.Core.Generators
             }
 
             var next = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == nodeId && e.FromPort == "execOut");
+                e => e.FromNodeId == nodeId && IsExecOutPort(e.FromPort));
             if (next != null)
                 EmitChain(next.ToNodeId, sb, indent);
         }
@@ -196,13 +198,8 @@ namespace VisualScripting.Core.Generators
 
             sb.AppendLine($"{pad}}}");
 
-            var falseEdge = _graph.Edges.FirstOrDefault(
-                e => e.FromNodeId == ifNode.Id &&
-                     (e.FromPort == "false" || e.FromPort == "falseBranch"));
-            if (falseEdge == null || !_map.ContainsKey(falseEdge.ToNodeId))
+            if (!TryResolveIfFalseSuccessor(ifNode, out var target) || target == null)
                 return;
-
-            var target = _map[falseEdge.ToNodeId];
 
             if (target.Type == NodeType.FlowIf)
             {
@@ -223,7 +220,7 @@ namespace VisualScripting.Core.Generators
                 else
                 {
                     var bodyEdge = _graph.Edges.FirstOrDefault(
-                        e => e.FromNodeId == target.Id && e.FromPort == "execOut");
+                        e => e.FromNodeId == target.Id && IsExecOutPort(e.FromPort));
                     if (bodyEdge != null)
                         EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
                 }
@@ -335,10 +332,11 @@ namespace VisualScripting.Core.Generators
             _emitted = new HashSet<string>();
 
             var hasIncomingExec = new HashSet<string>(
-                subGraph.Edges.Where(e => e.ToPort == "execIn").Select(e => e.ToNodeId));
+                subGraph.Edges.Where(e => IsExecInPort(e.ToPort)).Select(e => e.ToNodeId));
 
             var roots = subGraph.Nodes
                 .Where(n => !hasIncomingExec.Contains(n.Id) && IsStatementEntryNode(n))
+                .Where(n => !IsChainedElseBranchTarget(n.Id))
                 .ToList();
 
             foreach (var root in roots)
@@ -687,6 +685,97 @@ namespace VisualScripting.Core.Generators
                 return true;
 
             return false;
+        }
+
+        /// <summary>
+        /// else if / else не должны попадать в корни: на них уже есть вход с «ложного» выхода родительского if.
+        /// Иначе при произвольном порядке нод в списке средний if генерируется отдельным корнем и ломает цепочку.
+        /// </summary>
+        private bool IsChainedElseBranchTarget(string nodeId)
+        {
+            return _graph.Edges.Any(e =>
+                e.ToNodeId == nodeId &&
+                _map.TryGetValue(e.FromNodeId, out var from) &&
+                from.Type == NodeType.FlowIf &&
+                IsFalseBranchOutputPort(e.FromPort));
+        }
+
+        private static bool IsFalseBranchOutputPort(string? fromPort)
+        {
+            if (string.IsNullOrEmpty(fromPort))
+                return false;
+            if (fromPort == "false" || fromPort == "falseBranch")
+                return true;
+            return string.Equals(fromPort, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fromPort, "falseBranch", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool TryResolveIfFalseSuccessor(NodeData ifNode, out NodeData? successor)
+        {
+            successor = null;
+            var ifId = ifNode.Id;
+
+            EdgeData? explicitFalse = null;
+            var execInTargets = new List<EdgeData>();
+
+            foreach (var e in _graph.Edges)
+            {
+                if (e.FromNodeId != ifId) continue;
+                if (!_map.TryGetValue(e.ToNodeId, out var to)) continue;
+                if (to.Type != NodeType.FlowIf && to.Type != NodeType.FlowElse) continue;
+
+                if (IsFalseBranchOutputPort(e.FromPort))
+                    explicitFalse = e;
+
+                if (IsExecInPort(e.ToPort))
+                    execInTargets.Add(e);
+            }
+
+            if (explicitFalse != null)
+            {
+                successor = _map[explicitFalse.ToNodeId];
+                return true;
+            }
+
+            if (execInTargets.Count == 1)
+            {
+                successor = _map[execInTargets[0].ToNodeId];
+                return true;
+            }
+
+            var looseElse = _graph.Edges.FirstOrDefault(e =>
+                e.FromNodeId == ifId &&
+                _map.TryGetValue(e.ToNodeId, out var n) && n.Type == NodeType.FlowElse);
+            if (looseElse != null)
+            {
+                successor = _map[looseElse.ToNodeId];
+                return true;
+            }
+
+            var looseIfList = _graph.Edges.Where(e =>
+                e.FromNodeId == ifId &&
+                _map.TryGetValue(e.ToNodeId, out var n) && n.Type == NodeType.FlowIf).ToList();
+            if (looseIfList.Count == 1)
+            {
+                successor = _map[looseIfList[0].ToNodeId];
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsExecInPort(string? toPort)
+        {
+            if (string.IsNullOrEmpty(toPort)) return false;
+            var t = toPort.Trim();
+            return t == "execIn" || string.Equals(t, "execIn", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExecOutPort(string? fromPort)
+        {
+            if (string.IsNullOrEmpty(fromPort)) return false;
+            var t = fromPort.Trim();
+            return t == "execOut" || string.Equals(t, "execOut", StringComparison.OrdinalIgnoreCase);
         }
     }
 }
