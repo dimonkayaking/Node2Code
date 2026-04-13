@@ -1023,6 +1023,12 @@ namespace VisualScripting.Core.Parsers
                 case InvocationExpressionSyntax inv:
                     return VisitInvocationExpression(inv, isRoot, assignVariableToRoot, out unsupported);
 
+                case ConditionalExpressionSyntax cond:
+                    return CreateStringExpressionLiteralNode(cond.ToString().Trim(), isRoot ? assignVariableToRoot : null);
+
+                case InterpolatedStringExpressionSyntax interpolated:
+                    return CreateStringExpressionLiteralNode(interpolated.ToString().Trim(), isRoot ? assignVariableToRoot : null);
+
                 default:
                     unsupported = true;
                     _errors.Add(
@@ -1129,6 +1135,21 @@ namespace VisualScripting.Core.Parsers
         private static bool IsMath(NodeType t) =>
             t is NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply
                 or NodeType.MathDivide or NodeType.MathModulo;
+
+        private string CreateStringExpressionLiteralNode(string expressionText, string? variableName)
+        {
+            var id = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = NodeType.LiteralString,
+                Value = "",
+                ValueType = "string",
+                VariableName = variableName ?? "",
+                ExpressionOverride = expressionText
+            });
+            return id;
+        }
 
         private static bool IsLiteralNodeType(NodeType t) =>
             t is NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString;

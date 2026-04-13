@@ -612,17 +612,39 @@ namespace CustomVisualScripting.Editor.Windows
         /// </summary>
         private static string CanonicalPortIdForStorage(PortView port)
         {
-            var fn = port.fieldName ?? "";
-            if (string.Equals(fn, "execIn", StringComparison.OrdinalIgnoreCase)) return "execIn";
-            if (string.Equals(fn, "execOut", StringComparison.OrdinalIgnoreCase)) return "execOut";
-            if (string.Equals(fn, "falseBranch", StringComparison.OrdinalIgnoreCase)) return "falseBranch";
+            var fn = NormalizePortId(port.fieldName);
+            if (!string.IsNullOrEmpty(fn))
+                return fn;
 
-            var pn = port.portName ?? "";
-            if (string.Equals(pn, "execIn", StringComparison.OrdinalIgnoreCase)) return "execIn";
-            if (string.Equals(pn, "execOut", StringComparison.OrdinalIgnoreCase)) return "execOut";
-            if (string.Equals(pn, "false", StringComparison.OrdinalIgnoreCase)) return "falseBranch";
+            var pn = NormalizePortId(port.portName);
+            if (!string.IsNullOrEmpty(pn))
+                return pn;
 
-            return fn;
+            // Fallback for legacy/unnamed execution ports.
+            if (port.direction == Direction.Input)
+                return "execIn";
+            if (port.direction == Direction.Output)
+                return "execOut";
+
+            return "";
+        }
+
+        private static string NormalizePortId(string rawPortId)
+        {
+            if (string.IsNullOrWhiteSpace(rawPortId))
+                return "";
+
+            var id = rawPortId.Trim();
+            if (string.Equals(id, "execIn", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, "exec", StringComparison.OrdinalIgnoreCase))
+                return "execIn";
+            if (string.Equals(id, "execOut", StringComparison.OrdinalIgnoreCase))
+                return "execOut";
+            if (string.Equals(id, "false", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(id, "falseBranch", StringComparison.OrdinalIgnoreCase))
+                return "falseBranch";
+
+            return id;
         }
         
         private void OnDestroy()

@@ -714,61 +714,27 @@ namespace VisualScripting.Core.Generators
         {
             successor = null;
             var ifId = ifNode.Id;
-
-            EdgeData? explicitFalse = null;
-            var execInTargets = new List<EdgeData>();
-
-            foreach (var e in _graph.Edges)
-            {
-                if (e.FromNodeId != ifId) continue;
-                if (!_map.TryGetValue(e.ToNodeId, out var to)) continue;
-                if (to.Type != NodeType.FlowIf && to.Type != NodeType.FlowElse) continue;
-
-                if (IsFalseBranchOutputPort(e.FromPort))
-                    explicitFalse = e;
-
-                if (IsExecInPort(e.ToPort))
-                    execInTargets.Add(e);
-            }
-
-            if (explicitFalse != null)
-            {
-                successor = _map[explicitFalse.ToNodeId];
-                return true;
-            }
-
-            if (execInTargets.Count == 1)
-            {
-                successor = _map[execInTargets[0].ToNodeId];
-                return true;
-            }
-
-            var looseElse = _graph.Edges.FirstOrDefault(e =>
+            var explicitFalse = _graph.Edges.FirstOrDefault(e =>
                 e.FromNodeId == ifId &&
-                _map.TryGetValue(e.ToNodeId, out var n) && n.Type == NodeType.FlowElse);
-            if (looseElse != null)
-            {
-                successor = _map[looseElse.ToNodeId];
-                return true;
-            }
+                IsFalseBranchOutputPort(e.FromPort) &&
+                _map.TryGetValue(e.ToNodeId, out var targetNode) &&
+                (targetNode.Type == NodeType.FlowIf || targetNode.Type == NodeType.FlowElse));
 
-            var looseIfList = _graph.Edges.Where(e =>
-                e.FromNodeId == ifId &&
-                _map.TryGetValue(e.ToNodeId, out var n) && n.Type == NodeType.FlowIf).ToList();
-            if (looseIfList.Count == 1)
-            {
-                successor = _map[looseIfList[0].ToNodeId];
-                return true;
-            }
+            if (explicitFalse == null)
+                return false;
 
-            return false;
+            successor = _map[explicitFalse.ToNodeId];
+            return true;
         }
 
         private static bool IsExecInPort(string? toPort)
         {
             if (string.IsNullOrEmpty(toPort)) return false;
             var t = toPort.Trim();
-            return t == "execIn" || string.Equals(t, "execIn", StringComparison.OrdinalIgnoreCase);
+            return t == "execIn"
+                || t == "exec"
+                || string.Equals(t, "execIn", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "exec", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsExecOutPort(string? fromPort)

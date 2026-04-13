@@ -480,6 +480,43 @@ else
     }
 
     [Fact]
+    public void IfElseIfElse_LegacyFalseAndExecPortNames_StillEmitsElseIfChain()
+    {
+        var code = @"
+int number = 10;
+if (number > 0)
+{
+    Console.WriteLine(""Число положительное"");
+}
+else if (number < 0)
+{
+    Console.WriteLine(""Число отрицательное"");
+}
+else
+{
+    Console.WriteLine(""Число равно нулю"");
+}";
+
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+
+        var ifNodes = result.Graph.Nodes.Where(n => n.Type == NodeType.FlowIf).ToList();
+        Assert.Equal(2, ifNodes.Count);
+        var firstIfId = ifNodes[0].Id;
+        var secondIfId = ifNodes[1].Id;
+
+        var falseEdge = result.Graph.Edges.FirstOrDefault(
+            e => e.FromNodeId == firstIfId && e.ToNodeId == secondIfId && e.FromPort == "falseBranch");
+        Assert.NotNull(falseEdge);
+        falseEdge!.FromPort = "false";
+        falseEdge.ToPort = "exec";
+
+        var output = _generator.Generate(result.Graph).Replace("\r", "");
+        Assert.Contains("else if (number < 0)", output);
+        Assert.DoesNotContain("}\nif (number < 0)", output);
+    }
+
+    [Fact]
     public void ConsoleWriteLineWithVariable()
     {
         var code = @"
