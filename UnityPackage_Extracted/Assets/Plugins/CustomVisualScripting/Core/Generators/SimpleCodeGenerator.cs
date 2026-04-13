@@ -511,7 +511,9 @@ namespace VisualScripting.Core.Generators
         {
             var msgEdge = _graph.Edges.FirstOrDefault(
                 e => e.ToNodeId == node.Id && e.ToPort == "message");
-            var msg = msgEdge != null ? EmitCondExpr(msgEdge.FromNodeId) : "\"\"";
+            var msg = msgEdge != null
+                ? EmitCondExpr(msgEdge.FromNodeId)
+                : $"\"{(node.Value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
             sb.AppendLine($"{pad}Console.WriteLine({msg});");
         }
 

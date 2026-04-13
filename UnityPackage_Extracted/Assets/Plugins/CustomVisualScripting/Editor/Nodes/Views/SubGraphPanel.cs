@@ -835,7 +835,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 => new() { new() { name = "input", displayName = "input", typeName = "bool" } },
             
             NodeType.ConsoleWriteLine
-                => new() { new() { name = "execIn", displayName = "exec", typeName = "exec" }, new() { name = "message", displayName = "message", typeName = "string" } },
+                => new() { new() { name = "message", displayName = "message", typeName = "string" } },
             
             NodeType.IntParse => new() { new() { name = "input", displayName = "input", typeName = "string" } },
             NodeType.FloatParse => new() { new() { name = "input", displayName = "input", typeName = "string" } },

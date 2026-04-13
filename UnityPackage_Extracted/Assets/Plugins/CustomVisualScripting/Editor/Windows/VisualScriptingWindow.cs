@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
@@ -40,7 +41,7 @@ namespace CustomVisualScripting.Editor.Windows
         private string _currentFilePath;
         private bool _hasUnsavedChanges = false;
         
-        private GraphRunner _runner;
+        private CSharpProcessRunner _csharpRunner;
         
         [MenuItem("Tools/Visual Scripting")]
         public static void OpenWindow()
@@ -56,6 +57,8 @@ namespace CustomVisualScripting.Editor.Windows
             ParserBridge.Initialize();
             GeneratorBridge.Initialize();
             Application.logMessageReceived += OnLogMessageReceived;
+            _csharpRunner = new CSharpProcessRunner();
+            _csharpRunner.OnOutput += OnCSharpRunnerOutput;
             
             _currentGraph = new CompleteGraphData();
             _hasUnsavedChanges = false;
@@ -64,7 +67,29 @@ namespace CustomVisualScripting.Editor.Windows
         private void OnDisable()
         {
             Application.logMessageReceived -= OnLogMessageReceived;
+            if (_csharpRunner != null)
+            {
+                _csharpRunner.OnOutput -= OnCSharpRunnerOutput;
+                _csharpRunner.Dispose();
+                _csharpRunner = null;
+            }
             CleanupGraph();
+        }
+
+        private void OnCSharpRunnerOutput(string message, LogType type)
+        {
+            EditorApplication.delayCall += () =>
+            {
+                if (_consoleView != null)
+                {
+                    _consoleView.AddMessage(message, type);
+                }
+
+                if (_toolbar != null && type == LogType.Error)
+                {
+                    _toolbar.SetStatusError("Ошибка выполнения C#");
+                }
+            };
         }
         
         private void OnLogMessageReceived(string condition, string stackTrace, LogType type)
@@ -176,50 +201,57 @@ namespace CustomVisualScripting.Editor.Windows
             _toolbar.SetStatusSuccess("Код сгенерирован");
         }
         
-        private void OnRun()
+        private async void OnRun()
         {
             if (_currentGraph?.LogicGraph == null || _currentGraph.LogicGraph.Nodes.Count == 0)
             {
                 _toolbar.SetStatusError("Нет графа для выполнения");
                 return;
             }
+
+            if (_csharpRunner == null)
+            {
+                _toolbar.SetStatusError("Runner не инициализирован");
+                return;
+            }
+
+            if (_csharpRunner.IsRunning)
+            {
+                _toolbar.SetStatusWarning("Выполнение уже запущено");
+                return;
+            }
             
             _toolbar.SetRunMode(true);
             _toolbar.SetStatusWarning("Выполнение...");
-            
-            _runner = new GraphRunner();
-            
-            _runner.OnLogMessage += (message, type) => {
-                if (_consoleView != null)
-                {
-                    _consoleView.AddMessage(message, type);
-                }
-            };
+            SyncFullGraphFromView();
+            var code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
+            _codeEditor.Code = code;
             
             try
             {
-                _runner.Run(_currentGraph.LogicGraph);
-                _toolbar.SetStatusSuccess("Выполнение завершено");
+                var exitCode = await _csharpRunner.RunAsync(code);
+                EditorApplication.delayCall += () =>
+                {
+                    _toolbar.SetRunMode(false);
+                    _toolbar.SetStatusSuccess(exitCode == 0
+                        ? "Выполнение завершено"
+                        : $"Выполнение завершено с ошибкой ({exitCode})");
+                };
             }
             catch (Exception e)
             {
-                _toolbar.SetStatusError($"Ошибка: {e.Message}");
-                Debug.LogError($"[VS] Ошибка выполнения: {e.Message}");
-            }
-            finally
-            {
-                _toolbar.SetRunMode(false);
-                _runner = null;
+                EditorApplication.delayCall += () =>
+                {
+                    _toolbar.SetRunMode(false);
+                    _toolbar.SetStatusError($"Ошибка: {e.Message}");
+                    Debug.LogError($"[VS] Ошибка выполнения: {e.Message}");
+                };
             }
         }
         
         private void OnStop()
         {
-            if (_runner != null)
-            {
-                _runner.Clear();
-                _runner = null;
-            }
+            _csharpRunner?.Stop();
             _toolbar.SetRunMode(false);
             _toolbar.SetStatusNormal("Выполнение остановлено");
         }

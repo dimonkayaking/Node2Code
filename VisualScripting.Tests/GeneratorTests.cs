@@ -604,6 +604,21 @@ Console.WriteLine(message);";
     }
 
     [Fact]
+    public void ConsoleWriteLineWithoutMessageEdgeUsesNodeValue()
+    {
+        var graph = new GraphData();
+        graph.Nodes.Add(new NodeData
+        {
+            Id = "print_1",
+            Type = NodeType.ConsoleWriteLine,
+            Value = "Direct literal from node"
+        });
+
+        var output = _generator.Generate(graph);
+        Assert.Contains("Console.WriteLine(\"Direct literal from node\");", output);
+    }
+
+    [Fact]
     public void MultipleConsoleWriteLines()
     {
         var code = @"
