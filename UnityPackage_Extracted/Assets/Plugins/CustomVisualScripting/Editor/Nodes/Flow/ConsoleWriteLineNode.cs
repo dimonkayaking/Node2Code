@@ -64,7 +64,7 @@ namespace CustomVisualScripting.Editor.Nodes.Flow
             };
         }
 
-        public static string NormalizeType(string? type)
+        public static string NormalizeType(string type)
         {
             var t = (type ?? "").Trim().ToLowerInvariant();
             return t switch

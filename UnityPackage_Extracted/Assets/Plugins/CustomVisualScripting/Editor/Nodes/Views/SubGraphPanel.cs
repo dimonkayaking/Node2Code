@@ -23,9 +23,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
     public class SubGraphPanel : VisualElement
     {
         public event Action OnChanged;
+        public event Action<SubGraphPanel, Vector2> OnPanelResized;
+        private const float MinPanelWidth = 320f;
+        private const float MinPanelHeight = 180f;
+        private const float MinNodeWidth = 220f;
+        private const float MinNodeHeight = 120f;
 
         private readonly string _title;
         private readonly bool _isConditionPanel;
+        private readonly bool _verticalResizeOnly;
         private GraphData _subGraph;
 
         private Label _toggleLabel;
@@ -35,12 +41,14 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private IVisualElementScheduledItem _syncTicker;
         private bool _isExpanded = true;
         private bool _isSyncing;
+        private VisualElement _resizeHandle;
 
-        public SubGraphPanel(string title, GraphData subGraph, bool isConditionPanel)
+        public SubGraphPanel(string title, GraphData subGraph, bool isConditionPanel, bool verticalResizeOnly = false)
         {
             _title = title;
             _subGraph = subGraph ?? new GraphData();
             _isConditionPanel = isConditionPanel;
+            _verticalResizeOnly = verticalResizeOnly;
 
             BuildUI();
             Rebuild();
@@ -70,6 +78,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 new Color(0.3f, 0.3f, 0.3f);
             style.borderTopLeftRadius = style.borderTopRightRadius =
                 style.borderBottomLeftRadius = style.borderBottomRightRadius = 4;
+            style.minWidth = MinPanelWidth;
+            style.minHeight = MinPanelHeight;
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -110,9 +120,24 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _content.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
             _content.style.borderBottomLeftRadius = 4;
             _content.style.borderBottomRightRadius = 4;
-            _content.style.minHeight = 220;
+            _content.style.minHeight = MinPanelHeight;
             _content.style.overflow = Overflow.Hidden;
             Add(_content);
+
+            _resizeHandle = new VisualElement();
+            _resizeHandle.style.position = Position.Absolute;
+            _resizeHandle.style.right = 2;
+            _resizeHandle.style.bottom = 2;
+            _resizeHandle.style.width = 12;
+            _resizeHandle.style.height = 12;
+            _resizeHandle.style.backgroundColor = new Color(0.6f, 0.6f, 0.6f, 0.6f);
+            _resizeHandle.style.borderTopLeftRadius = 2;
+            _resizeHandle.style.borderTopRightRadius = 2;
+            _resizeHandle.style.borderBottomLeftRadius = 2;
+            _resizeHandle.style.borderBottomRightRadius = 2;
+            _resizeHandle.tooltip = "Потяните, чтобы изменить размер";
+            Add(_resizeHandle);
+            MakePanelResizable();
         }
 
         private void ToggleExpanded()
@@ -150,11 +175,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _graphView = new BaseGraphView(ownerWindow);
             _graphView.Initialize(_internalGraph);
             _graphView.style.flexGrow = 1;
-            _graphView.style.minHeight = 210;
+            _graphView.style.minHeight = MinPanelHeight - 10f;
             _graphView.graphViewChanged += OnGraphViewChanged;
             _syncTicker = _graphView.schedule.Execute(SyncBackFromGraphView).Every(300);
 
             RestoreEdges(nodeMap);
+            ConfigureNodeViewSizing(_graphView.nodeViews);
+            AutoLayoutIfNeeded(_graphView.nodeViews);
             _content.Add(_graphView);
         }
 
@@ -424,6 +451,115 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 ScriptableObject.DestroyImmediate(_internalGraph);
                 _internalGraph = null;
             }
+        }
+
+        private static void ConfigureNodeViewSizing(IEnumerable<BaseNodeView> nodeViews)
+        {
+            foreach (var nodeView in nodeViews)
+            {
+                if (nodeView == null)
+                    continue;
+
+                nodeView.capabilities |= Capabilities.Resizable;
+                nodeView.style.minWidth = MinNodeWidth;
+                nodeView.style.minHeight = MinNodeHeight;
+
+                var rect = nodeView.GetPosition();
+                nodeView.SetPosition(new Rect(
+                    rect.x,
+                    rect.y,
+                    Mathf.Max(rect.width, MinNodeWidth),
+                    Mathf.Max(rect.height, MinNodeHeight)));
+            }
+        }
+
+        private static void AutoLayoutIfNeeded(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            if (nodeViews == null || nodeViews.Count == 0)
+                return;
+            if (!HasHeavyOverlap(nodeViews))
+                return;
+
+            int columns = Mathf.CeilToInt(Mathf.Sqrt(nodeViews.Count));
+            for (int i = 0; i < nodeViews.Count; i++)
+            {
+                int row = i / columns;
+                int col = i % columns;
+                float x = 30f + col * 280f;
+                float y = 30f + row * 180f;
+                var rect = nodeViews[i].GetPosition();
+                nodeViews[i].SetPosition(new Rect(
+                    x,
+                    y,
+                    Mathf.Max(rect.width, MinNodeWidth),
+                    Mathf.Max(rect.height, MinNodeHeight)));
+            }
+        }
+
+        private static bool HasHeavyOverlap(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            if (nodeViews.Count <= 1)
+                return false;
+
+            int overlaps = 0;
+            for (int i = 0; i < nodeViews.Count; i++)
+            {
+                var a = nodeViews[i].GetPosition();
+                for (int j = i + 1; j < nodeViews.Count; j++)
+                {
+                    var b = nodeViews[j].GetPosition();
+                    if (a.Overlaps(b))
+                        overlaps++;
+                }
+            }
+
+            return overlaps >= System.Math.Max(1, nodeViews.Count / 3);
+        }
+
+        private void MakePanelResizable()
+        {
+            Vector2 startMouse = Vector2.zero;
+            Vector2 startSize = Vector2.zero;
+            bool resizing = false;
+
+            _resizeHandle.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                    return;
+                resizing = true;
+                startMouse = evt.mousePosition;
+                startSize = new Vector2(resolvedStyle.width, resolvedStyle.height);
+                _resizeHandle.CaptureMouse();
+                evt.StopPropagation();
+            });
+
+            _resizeHandle.RegisterCallback<MouseMoveEvent>(evt =>
+            {
+                if (!resizing)
+                    return;
+
+                var delta = evt.mousePosition - startMouse;
+                float height = Mathf.Max(MinPanelHeight, startSize.y + delta.y);
+                if (!_verticalResizeOnly)
+                {
+                    float width = Mathf.Max(MinPanelWidth, startSize.x + delta.x);
+                    style.width = width;
+                }
+                style.height = height;
+                _content.style.height = height - 28f;
+                OnPanelResized?.Invoke(this, new Vector2(resolvedStyle.width, height));
+                evt.StopPropagation();
+            });
+
+            _resizeHandle.RegisterCallback<MouseUpEvent>(evt =>
+            {
+                if (!resizing)
+                    return;
+
+                resizing = false;
+                _resizeHandle.ReleaseMouse();
+                evt.StopPropagation();
+            });
         }
     }
 }

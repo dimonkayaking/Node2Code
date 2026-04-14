@@ -29,6 +29,10 @@ namespace CustomVisualScripting.Editor.Windows
     public class VisualScriptingWindow : EditorWindow
     {
         public static VisualScriptingWindow ActiveWindow { get; private set; }
+        private const float MinNodeWidth = 220f;
+        private const float MinNodeHeight = 120f;
+        private const float AutoLayoutSpacingX = 280f;
+        private const float AutoLayoutSpacingY = 180f;
 
         private CompleteGraphData _currentGraph;
         private BaseGraph _internalGraph;
@@ -109,6 +113,7 @@ namespace CustomVisualScripting.Editor.Windows
         {
             if (_graphView != null)
             {
+                _graphView.graphViewChanged -= OnGraphViewChanged;
                 _graphView.Dispose();
                 _graphView = null;
             }
@@ -268,17 +273,20 @@ namespace CustomVisualScripting.Editor.Windows
                 OnSaveAs();
                 return;
             }
-            
+
             SyncFullGraphFromView();
-            
-            if (GraphSaver.SaveToJson(_currentGraph, _currentFilePath))
+            string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
+            _codeEditor.Code = code;
+
+            try
             {
+                File.WriteAllText(_currentFilePath, code);
                 _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(_currentFilePath)}");
                 _hasUnsavedChanges = false;
             }
-            else
+            catch (Exception e)
             {
-                _toolbar.SetStatusError("Ошибка сохранения");
+                _toolbar.SetStatusError($"Ошибка сохранения: {e.Message}");
             }
         }
         
@@ -286,43 +294,57 @@ namespace CustomVisualScripting.Editor.Windows
         {
             string defaultName = !string.IsNullOrEmpty(_currentFilePath)
                 ? Path.GetFileName(_currentFilePath)
-                : "graph.json";
+                : "Script.cs";
             
-            string path = EditorUtility.SaveFilePanel("Сохранить граф как", Application.dataPath, defaultName, "json");
+            string path = EditorUtility.SaveFilePanel("Сохранить код как", Application.dataPath, defaultName, "cs");
             if (string.IsNullOrEmpty(path)) return;
             
             SyncFullGraphFromView();
+            string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
+            _codeEditor.Code = code;
             _currentFilePath = path;
-            
-            if (GraphSaver.SaveToJson(_currentGraph, path))
+
+            try
             {
+                File.WriteAllText(path, code);
                 _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(path)}");
                 _hasUnsavedChanges = false;
             }
-            else
+            catch (Exception e)
             {
-                _toolbar.SetStatusError("Ошибка сохранения");
+                _toolbar.SetStatusError($"Ошибка сохранения: {e.Message}");
             }
         }
         
         private void OnLoad()
         {
-            string path = EditorUtility.OpenFilePanel("Загрузить граф", Application.dataPath, "json");
+            string path = EditorUtility.OpenFilePanel("Загрузить C# код", Application.dataPath, "cs");
             if (string.IsNullOrEmpty(path)) return;
-            
-            var loaded = GraphSaver.LoadFromJson(path);
-            if (loaded != null)
+
+            try
             {
-                _currentGraph = loaded;
+                var code = File.ReadAllText(path);
                 _currentFilePath = path;
+                _codeEditor.Code = code;
+
+                var result = ParserBridge.Parse(code);
+                if (result.HasErrors)
+                {
+                    _errorPanel.ShowErrors(result.Errors);
+                    _toolbar.SetStatusError($"Ошибок: {result.Errors.Count}");
+                    return;
+                }
+
+                _errorPanel.Clear();
+                _currentGraph = new CompleteGraphData();
+                _currentGraph = GraphConverter.LogicToComplete(result.Graph, _currentGraph);
                 _hasUnsavedChanges = false;
-                _codeEditor.Code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
                 RecreateGraphView();
-                _toolbar.SetStatusSuccess($"Загружено: {Path.GetFileName(path)}");
+                _toolbar.SetStatusSuccess($"Загружено и распарсено: {Path.GetFileName(path)}");
             }
-            else
+            catch (Exception e)
             {
-                _toolbar.SetStatusError("Ошибка загрузки");
+                _toolbar.SetStatusError($"Ошибка загрузки: {e.Message}");
             }
         }
         
@@ -523,6 +545,7 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphView = new BaseGraphView(this);
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
+                _graphView.graphViewChanged += OnGraphViewChanged;
                 
                 if (_currentGraph?.LogicGraph?.Edges != null && nodeMap.Count > 0)
                 {
@@ -590,6 +613,9 @@ namespace CustomVisualScripting.Editor.Windows
                         }
                     }
                 }
+
+                ConfigureNodeViewSizing(_graphView.nodeViews);
+                AutoLayoutIfNeeded();
                 
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
@@ -738,6 +764,94 @@ namespace CustomVisualScripting.Editor.Windows
             }
             
             CleanupGraph();
+        }
+
+        private void ConfigureNodeViewSizing(IEnumerable<BaseNodeView> nodeViews)
+        {
+            foreach (var nodeView in nodeViews)
+            {
+                if (nodeView == null)
+                    continue;
+
+                nodeView.capabilities |= Capabilities.Resizable;
+                nodeView.style.minWidth = MinNodeWidth;
+                nodeView.style.minHeight = MinNodeHeight;
+
+                var rect = nodeView.GetPosition();
+                var width = Mathf.Max(rect.width, MinNodeWidth);
+                var height = Mathf.Max(rect.height, MinNodeHeight);
+                nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
+            }
+        }
+
+        private GraphViewChange OnGraphViewChanged(GraphViewChange change)
+        {
+            if (_graphView?.nodeViews != null)
+                ConfigureNodeViewSizing(_graphView.nodeViews);
+            return change;
+        }
+
+        private void AutoLayoutIfNeeded()
+        {
+            if (_graphView == null || _graphView.nodeViews == null || _graphView.nodeViews.Count == 0)
+                return;
+
+            bool hasSavedPositions = _currentGraph?.VisualNodes != null &&
+                                     _currentGraph.VisualNodes.Count >= _graphView.nodeViews.Count;
+            bool hasMeaningfulSaved = hasSavedPositions && HasMeaningfulSavedPositions(_currentGraph.VisualNodes);
+
+            bool needLayout = !hasMeaningfulSaved || HasHeavyOverlap(_graphView.nodeViews);
+            if (!needLayout)
+                return;
+
+            int columns = Mathf.CeilToInt(Mathf.Sqrt(_graphView.nodeViews.Count));
+            for (int i = 0; i < _graphView.nodeViews.Count; i++)
+            {
+                var view = _graphView.nodeViews[i];
+                int row = i / columns;
+                int col = i % columns;
+                float x = 40f + col * AutoLayoutSpacingX;
+                float y = 40f + row * AutoLayoutSpacingY;
+
+                var rect = view.GetPosition();
+                view.SetPosition(new Rect(x, y, Mathf.Max(rect.width, MinNodeWidth), Mathf.Max(rect.height, MinNodeHeight)));
+            }
+        }
+
+        private static bool HasHeavyOverlap(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            if (nodeViews.Count <= 1)
+                return false;
+
+            int overlaps = 0;
+            for (int i = 0; i < nodeViews.Count; i++)
+            {
+                var a = nodeViews[i].GetPosition();
+                for (int j = i + 1; j < nodeViews.Count; j++)
+                {
+                    var b = nodeViews[j].GetPosition();
+                    if (a.Overlaps(b))
+                        overlaps++;
+                }
+            }
+
+            return overlaps >= Math.Max(1, nodeViews.Count / 3);
+        }
+
+        private static bool HasMeaningfulSavedPositions(IReadOnlyList<VisualNodeData> visualNodes)
+        {
+            if (visualNodes == null || visualNodes.Count == 0)
+                return false;
+
+            var unique = new HashSet<string>();
+            foreach (var vn in visualNodes)
+            {
+                var x = Mathf.RoundToInt(vn.Position.x);
+                var y = Mathf.RoundToInt(vn.Position.y);
+                unique.Add($"{x}:{y}");
+            }
+
+            return unique.Count > Math.Max(1, visualNodes.Count / 3);
         }
     }
 }

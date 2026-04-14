@@ -53,21 +53,24 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             conditionsRow.style.flexDirection = FlexDirection.Row;
             conditionsRow.style.justifyContent = Justify.SpaceBetween;
 
-            _initPanel = new SubGraphPanel("Объявление", _node.initSubGraph, false);
+            _initPanel = new SubGraphPanel("Объявление", _node.initSubGraph, false, true);
             _initPanel.style.flexGrow = 1;
             _initPanel.style.marginRight = 4;
             _initPanel.OnChanged += OnSubGraphChanged;
+            _initPanel.OnPanelResized += OnTopRowPanelResized;
             conditionsRow.Add(_initPanel);
 
-            _conditionPanel = new SubGraphPanel("Граница", _node.conditionSubGraph, true);
+            _conditionPanel = new SubGraphPanel("Граница", _node.conditionSubGraph, true, true);
             _conditionPanel.style.flexGrow = 1;
             _conditionPanel.style.marginRight = 4;
             _conditionPanel.OnChanged += OnSubGraphChanged;
+            _conditionPanel.OnPanelResized += OnTopRowPanelResized;
             conditionsRow.Add(_conditionPanel);
 
-            _incrementPanel = new SubGraphPanel("Шаг", _node.incrementSubGraph, false);
+            _incrementPanel = new SubGraphPanel("Шаг", _node.incrementSubGraph, false, true);
             _incrementPanel.style.flexGrow = 1;
             _incrementPanel.OnChanged += OnSubGraphChanged;
+            _incrementPanel.OnPanelResized += OnTopRowPanelResized;
             conditionsRow.Add(_incrementPanel);
 
             _panelsContainer.Add(conditionsRow);
@@ -97,6 +100,17 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _node.conditionSubGraph = _conditionPanel.SubGraph;
             _node.incrementSubGraph = _incrementPanel.SubGraph;
             _node.bodySubGraph = _bodyPanel.SubGraph;
+        }
+
+        private void OnTopRowPanelResized(SubGraphPanel source, UnityEngine.Vector2 size)
+        {
+            float syncedHeight = size.y;
+            foreach (var panel in new[] { _initPanel, _conditionPanel, _incrementPanel })
+            {
+                if (panel == null || panel == source)
+                    continue;
+                panel.style.height = syncedHeight;
+            }
         }
     }
 }
