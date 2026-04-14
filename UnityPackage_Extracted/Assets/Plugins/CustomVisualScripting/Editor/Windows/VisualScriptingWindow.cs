@@ -28,6 +28,8 @@ namespace CustomVisualScripting.Editor.Windows
 {
     public class VisualScriptingWindow : EditorWindow
     {
+        public static VisualScriptingWindow ActiveWindow { get; private set; }
+
         private CompleteGraphData _currentGraph;
         private BaseGraph _internalGraph;
         private BaseGraphView _graphView;
@@ -54,6 +56,7 @@ namespace CustomVisualScripting.Editor.Windows
         
         private void OnEnable()
         {
+            ActiveWindow = this;
             ParserBridge.Initialize();
             GeneratorBridge.Initialize();
             Application.logMessageReceived += OnLogMessageReceived;
@@ -66,6 +69,8 @@ namespace CustomVisualScripting.Editor.Windows
         
         private void OnDisable()
         {
+            if (ReferenceEquals(ActiveWindow, this))
+                ActiveWindow = null;
             Application.logMessageReceived -= OnLogMessageReceived;
             if (_csharpRunner != null)
             {
@@ -715,6 +720,8 @@ namespace CustomVisualScripting.Editor.Windows
         
         private void OnDestroy()
         {
+            if (ReferenceEquals(ActiveWindow, this))
+                ActiveWindow = null;
             if (_hasUnsavedChanges && _currentGraph != null && _currentGraph.LogicGraph.Nodes.Count > 0)
             {
                 bool save = EditorUtility.DisplayDialog(

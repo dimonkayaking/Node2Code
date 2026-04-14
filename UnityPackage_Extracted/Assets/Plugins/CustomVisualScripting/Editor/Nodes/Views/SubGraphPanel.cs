@@ -1,9 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using GraphProcessor;
+using UnityEditor;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.UIElements;
-using UnityEditor;
+using CustomVisualScripting.Editor.Nodes.Base;
+using CustomVisualScripting.Editor.Nodes.Comparison;
+using CustomVisualScripting.Editor.Nodes.Conversion;
+using CustomVisualScripting.Editor.Nodes.Debug;
+using CustomVisualScripting.Editor.Nodes.Flow;
+using CustomVisualScripting.Editor.Nodes.Literals;
+using CustomVisualScripting.Editor.Nodes.Logic;
+using CustomVisualScripting.Editor.Nodes.Math;
+using CustomVisualScripting.Editor.Nodes.Unity;
+using CustomVisualScripting.Editor.Windows;
 using VisualScripting.Core.Models;
 
 namespace CustomVisualScripting.Editor.Nodes.Views
@@ -18,30 +30,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
         private Label _toggleLabel;
         private VisualElement _content;
-        private VisualElement _canvas;
-        private VisualElement _connectionLayer;
-        private VisualElement _nodesLayer;
-
+        private BaseGraph _internalGraph;
+        private BaseGraphView _graphView;
+        private IVisualElementScheduledItem _syncTicker;
         private bool _isExpanded = true;
-
-        private string _connectingFromNodeId;
-        private string _connectingFromPort;
-
-        private const float NodeWidth = 150f;
-        private const float TitleHeight = 22f;
-        private const float TypeBarHeight = 14f;
-        private const float PortRowHeight = 18f;
-        private const float PortRadius = 5f;
-        private const float HSpacing = 50f;
-        private const float VSpacing = 14f;
-        private const float Padding = 14f;
-
-        private readonly Dictionary<string, Vector2> _nodePositions = new();
-        private readonly Dictionary<string, VisualElement> _nodeElements = new();
-        private readonly Dictionary<string, Dictionary<string, VisualElement>> _portElements = new();
-
-        private int _connectionRetryCount;
-        private const int MaxConnectionRetries = 5;
+        private bool _isSyncing;
 
         public SubGraphPanel(string title, GraphData subGraph, bool isConditionPanel)
         {
@@ -51,6 +44,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             BuildUI();
             Rebuild();
+            RegisterCallback<DetachFromPanelEvent>(_ => DisposeGraph());
         }
 
         public GraphData SubGraph => _subGraph;
@@ -59,6 +53,12 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         {
             _subGraph = subGraph ?? new GraphData();
             Rebuild();
+        }
+
+        public void Rebuild()
+        {
+            DisposeGraph();
+            CreateGraphViewFromSubGraph();
         }
 
         private void BuildUI()
@@ -95,22 +95,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             header.Add(titleLabel);
 
-            var addBtn = new Label("+");
-            addBtn.style.width = 20;
-            addBtn.style.height = 20;
-            addBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            addBtn.style.fontSize = 14;
-            addBtn.style.color = new Color(0.5f, 0.9f, 0.5f);
-            addBtn.RegisterCallback<MouseDownEvent>(e =>
-            {
-                ShowAddNodeMenu();
-                e.StopPropagation();
-            });
-            header.Add(addBtn);
-
             header.RegisterCallback<MouseDownEvent>(e =>
             {
-                if (e.button == 0 && e.target != addBtn)
+                if (e.button == 0)
                 {
                     ToggleExpanded();
                     e.StopPropagation();
@@ -123,53 +110,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _content.style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
             _content.style.borderBottomLeftRadius = 4;
             _content.style.borderBottomRightRadius = 4;
-            _content.style.minHeight = 60;
+            _content.style.minHeight = 220;
             _content.style.overflow = Overflow.Hidden;
-
-            _canvas = new VisualElement();
-            _canvas.style.position = Position.Relative;
-            _canvas.style.minHeight = 60;
-
-            _connectionLayer = new VisualElement();
-            _connectionLayer.style.position = Position.Absolute;
-            _connectionLayer.style.left = 0;
-            _connectionLayer.style.top = 0;
-            _connectionLayer.style.right = 0;
-            _connectionLayer.style.bottom = 0;
-            _connectionLayer.pickingMode = PickingMode.Ignore;
-            _canvas.Add(_connectionLayer);
-
-            _nodesLayer = new VisualElement();
-            _nodesLayer.style.position = Position.Absolute;
-            _nodesLayer.style.left = 0;
-            _nodesLayer.style.top = 0;
-            _nodesLayer.style.right = 0;
-            _nodesLayer.style.bottom = 0;
-            _canvas.Add(_nodesLayer);
-
-            _canvas.RegisterCallback<MouseDownEvent>(e =>
-            {
-                if (e.button == 1)
-                {
-                    ShowAddNodeMenu();
-                    e.StopPropagation();
-                }
-
-                if (_connectingFromNodeId != null)
-                {
-                    CancelConnection();
-                    e.StopPropagation();
-                }
-            });
-
-            // Пересчёт линий при зуме/панорамировании родительского графа: worldBound − canvasRect
-            // даёт смещение; координаты портов нужно переводить в локальное пространство слоя связей.
-            _canvas.RegisterCallback<GeometryChangedEvent>(_ => ScheduleConnectionDraw());
-
-            _content.Add(_canvas);
             Add(_content);
-
-            RegisterCallback<GeometryChangedEvent>(_ => ScheduleConnectionDraw());
         }
 
         private void ToggleExpanded()
@@ -179,704 +122,308 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _toggleLabel.text = _isExpanded ? "\u25BC" : "\u25B6";
         }
 
-        public void Rebuild()
+        private void CreateGraphViewFromSubGraph()
         {
-            _nodeElements.Clear();
-            _portElements.Clear();
-            _nodePositions.Clear();
-            _nodesLayer.Clear();
-            _connectionLayer.Clear();
-            _connectionRetryCount = 0;
+            _content.Clear();
+            _internalGraph = ScriptableObject.CreateInstance<BaseGraph>();
+            var nodeMap = new Dictionary<string, CustomBaseNode>();
 
-            if (_subGraph == null || _subGraph.Nodes.Count == 0)
+            foreach (var nodeData in _subGraph.Nodes)
             {
-                var emptyLabel = new Label(_isConditionPanel
-                    ? "Добавьте ноды условия"
-                    : "Добавьте ноды тела");
-                emptyLabel.style.color = new Color(0.5f, 0.5f, 0.5f);
-                emptyLabel.style.fontSize = 10;
-                emptyLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-                emptyLabel.style.paddingTop = 20;
-                emptyLabel.style.paddingBottom = 20;
-                _nodesLayer.Add(emptyLabel);
-                _canvas.style.minHeight = 60;
+                var node = CreateNodeFromData(nodeData);
+                if (node == null)
+                    continue;
+
+                node.NodeId = nodeData.Id;
+                node.InitializeFromData(nodeData);
+                if (node.GUID != node.NodeId)
+                    node.SetGUID(node.NodeId);
+
+                ApplyNodeLiteralValues(node, nodeData);
+                _internalGraph.AddNode(node);
+                nodeMap[nodeData.Id] = node;
+            }
+
+            var ownerWindow = (EditorWindow)VisualScriptingWindow.ActiveWindow
+                              ?? EditorWindow.focusedWindow
+                              ?? Resources.FindObjectsOfTypeAll<VisualScriptingWindow>().FirstOrDefault();
+            _graphView = new BaseGraphView(ownerWindow);
+            _graphView.Initialize(_internalGraph);
+            _graphView.style.flexGrow = 1;
+            _graphView.style.minHeight = 210;
+            _graphView.graphViewChanged += OnGraphViewChanged;
+            _syncTicker = _graphView.schedule.Execute(SyncBackFromGraphView).Every(300);
+
+            RestoreEdges(nodeMap);
+            _content.Add(_graphView);
+        }
+
+        private GraphViewChange OnGraphViewChanged(GraphViewChange change)
+        {
+            if (_isSyncing)
+                return change;
+
+            SyncBackFromGraphView();
+            return change;
+        }
+
+        private void SyncBackFromGraphView()
+        {
+            if (_graphView == null || _internalGraph == null)
                 return;
-            }
 
-            ComputeLayout();
-            CreateNodeElements();
-
-            ScheduleConnectionDraw();
-        }
-
-        private void ScheduleConnectionDraw()
-        {
-            _canvas.RegisterCallbackOnce<GeometryChangedEvent>(_ => TryDrawConnections());
-            schedule.Execute(TryDrawConnections).ExecuteLater(100);
-        }
-
-        private void TryDrawConnections()
-        {
-            _connectionLayer.Clear();
-
-            bool allDrawn = true;
-            foreach (var edge in _subGraph.Edges)
+            _isSyncing = true;
+            try
             {
-                var fromPos = GetPortWorldPos(edge.FromNodeId, edge.FromPort, false);
-                var toPos = GetPortWorldPos(edge.ToNodeId, edge.ToPort, true);
+                _subGraph.Nodes.Clear();
+                _subGraph.Edges.Clear();
 
-                if (fromPos == null || toPos == null)
+                var graphNodes = _internalGraph.nodes.OfType<CustomBaseNode>().ToList();
+                var validNodeIds = new HashSet<string>();
+
+                foreach (var customNode in graphNodes)
                 {
-                    allDrawn = false;
-                    continue;
-                }
+                    var nodeData = customNode.ToNodeData();
+                    nodeData.Id = customNode.NodeId;
+                    nodeData.VariableName = customNode.variableName;
 
-                _connectionLayer.Add(CreateLine(fromPos.Value, toPos.Value));
-            }
-
-            if (!allDrawn && _connectionRetryCount < MaxConnectionRetries)
-            {
-                _connectionRetryCount++;
-                schedule.Execute(TryDrawConnections).ExecuteLater(50 * _connectionRetryCount);
-            }
-        }
-
-        private void ComputeLayout()
-        {
-            var layers = new List<List<string>>();
-            var nodeLayer = new Dictionary<string, int>();
-            var inDegree = new Dictionary<string, int>();
-
-            foreach (var node in _subGraph.Nodes)
-                inDegree[node.Id] = 0;
-
-            foreach (var edge in _subGraph.Edges)
-            {
-                if (inDegree.ContainsKey(edge.ToNodeId))
-                    inDegree[edge.ToNodeId]++;
-            }
-
-            var queue = new Queue<string>();
-            foreach (var kvp in inDegree.Where(k => k.Value == 0))
-                queue.Enqueue(kvp.Key);
-
-            while (queue.Count > 0)
-            {
-                var current = queue.Dequeue();
-
-                int maxParentLayer = -1;
-                foreach (var edge in _subGraph.Edges.Where(e => e.ToNodeId == current))
-                {
-                    if (nodeLayer.TryGetValue(edge.FromNodeId, out var pl))
-                        maxParentLayer = Mathf.Max(maxParentLayer, pl);
-                }
-
-                var layer = maxParentLayer + 1;
-                nodeLayer[current] = layer;
-
-                while (layers.Count <= layer)
-                    layers.Add(new List<string>());
-                layers[layer].Add(current);
-
-                foreach (var edge in _subGraph.Edges.Where(e => e.FromNodeId == current))
-                {
-                    if (!inDegree.ContainsKey(edge.ToNodeId)) continue;
-                    inDegree[edge.ToNodeId]--;
-                    if (inDegree[edge.ToNodeId] <= 0)
-                        queue.Enqueue(edge.ToNodeId);
-                }
-            }
-
-            foreach (var node in _subGraph.Nodes)
-            {
-                if (nodeLayer.ContainsKey(node.Id)) continue;
-                if (layers.Count == 0)
-                    layers.Add(new List<string>());
-                layers[0].Add(node.Id);
-                nodeLayer[node.Id] = 0;
-            }
-
-            float x = Padding;
-            float maxHeight = 0;
-
-            for (int i = 0; i < layers.Count; i++)
-            {
-                float y = Padding;
-                foreach (var nodeId in layers[i])
-                {
-                    var node = _subGraph.Nodes.First(n => n.Id == nodeId);
-                    float h = GetNodeHeight(node);
-                    _nodePositions[nodeId] = new Vector2(x, y);
-                    y += h + VSpacing;
-                }
-
-                maxHeight = Mathf.Max(maxHeight, y);
-                x += NodeWidth + HSpacing;
-            }
-
-            _canvas.style.minHeight = maxHeight + Padding;
-            _canvas.style.minWidth = x + Padding;
-        }
-
-        private float GetNodeHeight(NodeData node)
-        {
-            var inputs = GetInputPorts(node.Type);
-            var outputs = GetOutputPorts(node.Type);
-            int maxPorts = Mathf.Max(inputs.Count, outputs.Count);
-            return TitleHeight + TypeBarHeight + Mathf.Max(maxPorts, 1) * PortRowHeight + 4;
-        }
-
-        private void CreateNodeElements()
-        {
-            foreach (var node in _subGraph.Nodes)
-            {
-                if (!_nodePositions.TryGetValue(node.Id, out var pos))
-                    continue;
-
-                var nodeEl = CreateMiniNode(node, pos);
-                _nodesLayer.Add(nodeEl);
-                _nodeElements[node.Id] = nodeEl;
-            }
-        }
-
-        private VisualElement CreateMiniNode(NodeData node, Vector2 pos)
-        {
-            var color = GetNodeColor(node.Type);
-            float height = GetNodeHeight(node);
-
-            var container = new VisualElement();
-            container.style.position = Position.Absolute;
-            container.style.left = pos.x;
-            container.style.top = pos.y;
-            container.style.width = NodeWidth;
-            container.style.height = height;
-            container.style.borderTopLeftRadius = container.style.borderTopRightRadius =
-                container.style.borderBottomLeftRadius = container.style.borderBottomRightRadius = 4;
-            container.style.overflow = Overflow.Hidden;
-            container.style.borderTopWidth = container.style.borderBottomWidth =
-                container.style.borderLeftWidth = container.style.borderRightWidth = 1;
-            container.style.borderTopColor = container.style.borderBottomColor =
-                container.style.borderLeftColor = container.style.borderRightColor = new Color(0.15f, 0.15f, 0.15f);
-
-            var titleBar = new VisualElement();
-            titleBar.style.backgroundColor = color;
-            titleBar.style.height = TitleHeight;
-            titleBar.style.flexDirection = FlexDirection.Row;
-            titleBar.style.alignItems = Align.Center;
-            titleBar.style.paddingLeft = 6;
-            titleBar.style.paddingRight = 2;
-
-            var titleLabel = new Label(FormatNodeTitle(node));
-            titleLabel.style.fontSize = 10;
-            titleLabel.style.color = Color.white;
-            titleLabel.style.flexGrow = 1;
-            titleLabel.style.overflow = Overflow.Hidden;
-            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            titleBar.Add(titleLabel);
-
-            var deleteBtn = new Label("\u00D7");
-            deleteBtn.style.fontSize = 12;
-            deleteBtn.style.color = new Color(1f, 0.6f, 0.6f);
-            deleteBtn.style.width = 16;
-            deleteBtn.style.height = 16;
-            deleteBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            deleteBtn.RegisterCallback<MouseDownEvent>(e =>
-            {
-                RemoveNode(node.Id);
-                e.StopPropagation();
-            });
-            titleBar.Add(deleteBtn);
-            container.Add(titleBar);
-
-            var typeBar = new VisualElement();
-            typeBar.style.backgroundColor = new Color(color.r * 0.6f, color.g * 0.6f, color.b * 0.6f);
-            typeBar.style.height = TypeBarHeight;
-            typeBar.style.paddingLeft = 6;
-            typeBar.style.justifyContent = Justify.Center;
-
-            var typeLabel = new Label(FormatNodeSubtitle(node));
-            typeLabel.style.fontSize = 8;
-            typeLabel.style.color = new Color(0.85f, 0.85f, 0.85f);
-            typeBar.Add(typeLabel);
-            container.Add(typeBar);
-
-            var portArea = new VisualElement();
-            portArea.style.flexGrow = 1;
-            portArea.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f);
-            portArea.style.flexDirection = FlexDirection.Row;
-
-            var inputCol = new VisualElement();
-            inputCol.style.flexGrow = 1;
-            inputCol.style.justifyContent = Justify.Center;
-            inputCol.style.paddingLeft = 2;
-
-            _portElements[node.Id] = new Dictionary<string, VisualElement>();
-
-            foreach (var port in GetInputPorts(node.Type))
-            {
-                var portRow = CreatePortElement(node.Id, port.name, port.displayName, port.typeName, true);
-                inputCol.Add(portRow);
-            }
-
-            portArea.Add(inputCol);
-
-            var outputCol = new VisualElement();
-            outputCol.style.flexGrow = 1;
-            outputCol.style.justifyContent = Justify.Center;
-            outputCol.style.alignItems = Align.FlexEnd;
-            outputCol.style.paddingRight = 2;
-
-            foreach (var port in GetOutputPorts(node.Type))
-            {
-                var portRow = CreatePortElement(node.Id, port.name, port.displayName, port.typeName, false);
-                outputCol.Add(portRow);
-            }
-
-            portArea.Add(outputCol);
-            container.Add(portArea);
-
-            MakeDraggable(container, node.Id);
-
-            return container;
-        }
-
-        private VisualElement CreatePortElement(string nodeId, string portName, string displayName, string typeName, bool isInput)
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = isInput ? FlexDirection.Row : FlexDirection.RowReverse;
-            row.style.alignItems = Align.Center;
-            row.style.height = PortRowHeight;
-
-            var isExec = portName == "execIn" || portName == "execOut";
-
-            var circle = new VisualElement();
-            circle.style.width = PortRadius * 2;
-            circle.style.height = PortRadius * 2;
-            circle.style.borderTopLeftRadius = circle.style.borderTopRightRadius =
-                circle.style.borderBottomLeftRadius = circle.style.borderBottomRightRadius = PortRadius;
-
-            if (isExec)
-                circle.style.backgroundColor = new Color(0.9f, 0.9f, 0.9f);
-            else if (isInput)
-                circle.style.backgroundColor = GetTypeColor(typeName);
-            else
-                circle.style.backgroundColor = GetTypeColor(typeName);
-
-            circle.style.borderTopWidth = circle.style.borderBottomWidth =
-                circle.style.borderLeftWidth = circle.style.borderRightWidth = 1;
-            circle.style.borderTopColor = circle.style.borderBottomColor =
-                circle.style.borderLeftColor = circle.style.borderRightColor = new Color(0.4f, 0.4f, 0.4f);
-
-            var key = $"{(isInput ? "in" : "out")}:{portName}";
-            _portElements[nodeId][key] = circle;
-
-            circle.RegisterCallback<MouseDownEvent>(e =>
-            {
-                OnPortClicked(nodeId, portName, isInput);
-                e.StopPropagation();
-            });
-
-            row.Add(circle);
-
-            var labelText = string.IsNullOrEmpty(typeName) ? displayName : $"{displayName} ({typeName})";
-            var label = new Label(labelText);
-            label.style.fontSize = 8;
-            label.style.color = new Color(0.75f, 0.75f, 0.75f);
-            label.style.marginLeft = isInput ? 3 : 0;
-            label.style.marginRight = isInput ? 0 : 3;
-            row.Add(label);
-
-            return row;
-        }
-
-        private static Color GetTypeColor(string typeName)
-        {
-            return typeName switch
-            {
-                "int" => new Color(0.3f, 0.7f, 1f),
-                "float" => new Color(0.3f, 0.9f, 0.5f),
-                "bool" => new Color(0.9f, 0.3f, 0.3f),
-                "string" => new Color(0.9f, 0.7f, 0.2f),
-                "exec" => new Color(0.9f, 0.9f, 0.9f),
-                "GameObject" => new Color(0.4f, 0.8f, 0.4f),
-                "Vector3" => new Color(0.2f, 0.7f, 0.9f),
-                _ => new Color(0.6f, 0.6f, 0.6f)
-            };
-        }
-
-        private void OnPortClicked(string nodeId, string portName, bool isInput)
-        {
-            if (isInput && _connectingFromNodeId != null)
-            {
-                if (_connectingFromNodeId == nodeId) { CancelConnection(); return; }
-                AddConnection(_connectingFromNodeId, _connectingFromPort, nodeId, portName);
-                _connectingFromNodeId = null;
-                _connectingFromPort = null;
-            }
-            else if (!isInput)
-            {
-                _connectingFromNodeId = nodeId;
-                _connectingFromPort = portName;
-
-                var key = $"out:{portName}";
-                if (_portElements.TryGetValue(nodeId, out var ports) && ports.TryGetValue(key, out var el))
-                {
-                    el.style.backgroundColor = new Color(1f, 1f, 0.3f);
-                    var capturedNodeId = nodeId;
-                    schedule.Execute(() =>
+                    if (customNode is IntNode intNode)
                     {
-                        if (_connectingFromNodeId == capturedNodeId)
-                            CancelConnection();
-                    }).ExecuteLater(5000);
-                }
-            }
-        }
+                        nodeData.Value = intNode.intValue.ToString();
+                        nodeData.ExpressionOverride = intNode.expressionOverride;
+                    }
+                    else if (customNode is FloatNode floatNode)
+                    {
+                        nodeData.Value = floatNode.floatValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        nodeData.ExpressionOverride = floatNode.expressionOverride;
+                    }
+                    else if (customNode is BoolNode boolNode)
+                    {
+                        nodeData.Value = boolNode.boolValue.ToString();
+                        nodeData.ExpressionOverride = boolNode.expressionOverride;
+                    }
+                    else if (customNode is StringNode stringNode)
+                    {
+                        nodeData.Value = stringNode.stringValue;
+                        nodeData.ExpressionOverride = stringNode.expressionOverride;
+                    }
+                    else if (customNode is ConsoleWriteLineNode cwlNode)
+                    {
+                        nodeData.Value = cwlNode.messageText;
+                        nodeData.ValueType = cwlNode.messageValueType;
+                    }
 
-        private void CancelConnection()
-        {
-            if (_connectingFromNodeId != null)
-            {
-                var key = $"out:{_connectingFromPort}";
-                if (_portElements.TryGetValue(_connectingFromNodeId, out var ports) &&
-                    ports.TryGetValue(key, out var el))
+                    if (customNode is IfNode ifNode)
+                    {
+                        nodeData.ConditionSubGraph = ifNode.conditionSubGraph;
+                        nodeData.BodySubGraph = ifNode.bodySubGraph;
+                    }
+                    else if (customNode is ElseNode elseNode)
+                    {
+                        nodeData.BodySubGraph = elseNode.bodySubGraph;
+                    }
+                    else if (customNode is ForNode forNode)
+                    {
+                        nodeData.InitSubGraph = forNode.initSubGraph;
+                        nodeData.ConditionSubGraph = forNode.conditionSubGraph;
+                        nodeData.IncrementSubGraph = forNode.incrementSubGraph;
+                        nodeData.BodySubGraph = forNode.bodySubGraph;
+                    }
+                    else if (customNode is WhileNode whileNode)
+                    {
+                        nodeData.ConditionSubGraph = whileNode.conditionSubGraph;
+                        nodeData.BodySubGraph = whileNode.bodySubGraph;
+                    }
+
+                    _subGraph.Nodes.Add(nodeData);
+                    validNodeIds.Add(customNode.NodeId);
+                }
+
+                foreach (var edgeView in _graphView.edgeViews)
                 {
-                    el.style.backgroundColor = GetTypeColor(GetPortType(_connectingFromPort));
+                    if (edgeView == null)
+                        continue;
+
+                    var fromPort = edgeView.output as PortView;
+                    var toPort = edgeView.input as PortView;
+                    if (fromPort == null || toPort == null)
+                        continue;
+                    if (fromPort.direction != Direction.Output || toPort.direction != Direction.Input)
+                        continue;
+
+                    var fromNode = fromPort.owner.nodeTarget as CustomBaseNode;
+                    var toNode = toPort.owner.nodeTarget as CustomBaseNode;
+                    if (fromNode == null || toNode == null)
+                        continue;
+                    if (!validNodeIds.Contains(fromNode.NodeId) || !validNodeIds.Contains(toNode.NodeId))
+                        continue;
+
+                    _subGraph.Edges.Add(new EdgeData
+                    {
+                        FromNodeId = fromNode.NodeId,
+                        FromPort = CanonicalPortIdForStorage(fromPort),
+                        ToNodeId = toNode.NodeId,
+                        ToPort = CanonicalPortIdForStorage(toPort)
+                    });
                 }
             }
-
-            _connectingFromNodeId = null;
-            _connectingFromPort = null;
-        }
-
-        private string GetPortType(string portName)
-        {
-            return portName switch
+            finally
             {
-                "execIn" or "execOut" => "exec",
-                "inputValue" => "value",
-                "output" => "value",
-                "inputA" or "inputB" => "float",
-                "left" or "right" => "float",
-                "input" => "float",
-                "result" => "bool",
-                "message" => "string",
-                "GameObject" => "GameObject",
-                "Position" or "Vector3" => "Vector3",
-                _ => ""
-            };
+                _isSyncing = false;
+            }
+
+            OnChanged?.Invoke();
         }
 
-        private void AddConnection(string fromId, string fromPort, string toId, string toPort)
+        private void RestoreEdges(Dictionary<string, CustomBaseNode> nodeMap)
         {
-            if (fromId == toId) return;
-            if (_subGraph.Edges.Any(e =>
-                    e.FromNodeId == fromId && e.FromPort == fromPort &&
-                    e.ToNodeId == toId && e.ToPort == toPort))
+            if (_subGraph.Edges == null || _subGraph.Edges.Count == 0)
                 return;
 
-            _subGraph.Edges.Add(new EdgeData
+            foreach (var edgeData in _subGraph.Edges)
             {
-                FromNodeId = fromId,
-                FromPort = fromPort,
-                ToNodeId = toId,
-                ToPort = toPort
-            });
+                if (!nodeMap.TryGetValue(edgeData.FromNodeId, out var fromNode))
+                    continue;
+                if (!nodeMap.TryGetValue(edgeData.ToNodeId, out var toNode))
+                    continue;
+                if (!_graphView.nodeViewsPerNode.TryGetValue(fromNode, out var fromNodeView))
+                    continue;
+                if (!_graphView.nodeViewsPerNode.TryGetValue(toNode, out var toNodeView))
+                    continue;
 
-            Rebuild();
-            OnChanged?.Invoke();
-        }
+                var fromPort = fromNodeView.outputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.FromPort));
+                var toPort = toNodeView.inputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.ToPort));
+                if (fromPort == null || toPort == null)
+                    continue;
 
-        private void RemoveNode(string nodeId)
-        {
-            _subGraph.Nodes.RemoveAll(n => n.Id == nodeId);
-            _subGraph.Edges.RemoveAll(e => e.FromNodeId == nodeId || e.ToNodeId == nodeId);
-            Rebuild();
-            OnChanged?.Invoke();
-        }
+                bool alreadyConnected = false;
+                foreach (var existingEdge in _graphView.edgeViews)
+                {
+                    if (existingEdge.output == fromPort && existingEdge.input == toPort)
+                    {
+                        alreadyConnected = true;
+                        break;
+                    }
+                }
 
-        private void CreateConnectionLines()
-        {
-            _connectionLayer.Clear();
-            foreach (var edge in _subGraph.Edges)
-            {
-                var fromPos = GetPortWorldPos(edge.FromNodeId, edge.FromPort, false);
-                var toPos = GetPortWorldPos(edge.ToNodeId, edge.ToPort, true);
-                if (fromPos == null || toPos == null) continue;
-                _connectionLayer.Add(CreateLine(fromPos.Value, toPos.Value));
+                if (!alreadyConnected)
+                    _graphView.Connect(toPort, fromPort);
             }
         }
 
-        private Vector2? GetPortWorldPos(string nodeId, string portName, bool isInput)
+        private static string CanonicalPortIdForStorage(PortView port)
         {
-            var key = $"{(isInput ? "in" : "out")}:{portName}";
-            if (!_portElements.TryGetValue(nodeId, out var ports) || !ports.TryGetValue(key, out var el))
+            var fn = PortIds.Normalize(port.fieldName);
+            if (!string.IsNullOrEmpty(fn))
+                return fn;
+
+            var pn = PortIds.Normalize(port.portName);
+            if (!string.IsNullOrEmpty(pn))
+                return pn;
+
+            if (port.direction == Direction.Input)
+                return PortIds.ExecIn;
+            if (port.direction == Direction.Output)
+                return PortIds.ExecOut;
+            return "";
+        }
+
+        private static bool IsPortMatchForStorage(PortView port, string savedPortId)
+        {
+            if (port == null || string.IsNullOrWhiteSpace(savedPortId))
+                return false;
+
+            var expected = PortIds.Normalize(savedPortId);
+            if (string.IsNullOrEmpty(expected))
+                return false;
+
+            var field = PortIds.Normalize(port.fieldName);
+            if (!string.IsNullOrEmpty(field) &&
+                string.Equals(field, expected, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var name = PortIds.Normalize(port.portName);
+            return !string.IsNullOrEmpty(name) &&
+                   string.Equals(name, expected, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ApplyNodeLiteralValues(CustomBaseNode node, NodeData nodeData)
+        {
+            if (node is IntNode intNode && int.TryParse(nodeData.Value, out int intVal))
+                intNode.intValue = intVal;
+            else if (node is FloatNode floatNode &&
+                     float.TryParse(nodeData.Value, System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture, out float floatVal))
+                floatNode.floatValue = floatVal;
+            else if (node is BoolNode boolNode && bool.TryParse(nodeData.Value, out bool boolVal))
+                boolNode.boolValue = boolVal;
+            else if (node is StringNode stringNode)
+                stringNode.stringValue = nodeData.Value;
+        }
+
+        private CustomBaseNode CreateNodeFromData(NodeData data)
+        {
+            if (data == null)
                 return null;
 
-            var rect = el.worldBound;
-            if (rect.width < 1f || rect.height < 1f)
+            if (_isConditionPanel && data.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile)
                 return null;
 
-            return _connectionLayer.WorldToLocal(rect.center);
-        }
-
-        private static VisualElement CreateLine(Vector2 from, Vector2 to)
-        {
-            float dx = to.x - from.x;
-            float dy = to.y - from.y;
-            float length = Mathf.Sqrt(dx * dx + dy * dy);
-            float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
-
-            var line = new VisualElement();
-            line.style.position = Position.Absolute;
-            line.style.width = length;
-            line.style.height = 2;
-            line.style.backgroundColor = new Color(0.6f, 0.6f, 0.6f);
-            line.style.left = from.x;
-            line.style.top = from.y - 1;
-            line.style.rotate = new Rotate(angle);
-            line.style.transformOrigin = new TransformOrigin(0, Length.Percent(50));
-            line.pickingMode = PickingMode.Ignore;
-
-            return line;
-        }
-
-        private void MakeDraggable(VisualElement element, string nodeId)
-        {
-            Vector2 startMousePos = Vector2.zero;
-            Vector2 startNodePos = Vector2.zero;
-            bool isDragging = false;
-
-            element.RegisterCallback<MouseDownEvent>(e =>
+            return data.Type switch
             {
-                if (e.button != 0) return;
-                isDragging = true;
-                startMousePos = e.mousePosition;
-                startNodePos = _nodePositions.TryGetValue(nodeId, out var p) ? p : Vector2.zero;
-                element.CaptureMouse();
-                e.StopPropagation();
-            });
-
-            element.RegisterCallback<MouseMoveEvent>(e =>
-            {
-                if (!isDragging) return;
-                var delta = (Vector2)e.mousePosition - startMousePos;
-                var newPos = startNodePos + delta;
-                newPos.x = Mathf.Max(0, newPos.x);
-                newPos.y = Mathf.Max(0, newPos.y);
-
-                _nodePositions[nodeId] = newPos;
-                element.style.left = newPos.x;
-                element.style.top = newPos.y;
-
-                schedule.Execute(CreateConnectionLines);
-                e.StopPropagation();
-            });
-
-            element.RegisterCallback<MouseUpEvent>(e =>
-            {
-                if (!isDragging) return;
-                isDragging = false;
-                element.ReleaseMouse();
-                OnChanged?.Invoke();
-                e.StopPropagation();
-            });
-        }
-
-        private void ShowAddNodeMenu()
-        {
-            var menu = new GenericMenu();
-
-            menu.AddItem(new GUIContent("Literals/Int"), false, () => AddNode(NodeType.LiteralInt));
-            menu.AddItem(new GUIContent("Literals/Float"), false, () => AddNode(NodeType.LiteralFloat));
-            menu.AddItem(new GUIContent("Literals/Bool"), false, () => AddNode(NodeType.LiteralBool));
-            menu.AddItem(new GUIContent("Literals/String"), false, () => AddNode(NodeType.LiteralString));
-            menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Comparison/Equal"), false, () => AddNode(NodeType.CompareEqual));
-            menu.AddItem(new GUIContent("Comparison/Not Equal"), false, () => AddNode(NodeType.CompareNotEqual));
-            menu.AddItem(new GUIContent("Comparison/Greater"), false, () => AddNode(NodeType.CompareGreater));
-            menu.AddItem(new GUIContent("Comparison/Less"), false, () => AddNode(NodeType.CompareLess));
-            menu.AddItem(new GUIContent("Comparison/Greater Or Equal"), false, () => AddNode(NodeType.CompareGreaterOrEqual));
-            menu.AddItem(new GUIContent("Comparison/Less Or Equal"), false, () => AddNode(NodeType.CompareLessOrEqual));
-            menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Logic/And"), false, () => AddNode(NodeType.LogicalAnd));
-            menu.AddItem(new GUIContent("Logic/Or"), false, () => AddNode(NodeType.LogicalOr));
-            menu.AddItem(new GUIContent("Logic/Not"), false, () => AddNode(NodeType.LogicalNot));
-            menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Math/Add"), false, () => AddNode(NodeType.MathAdd));
-            menu.AddItem(new GUIContent("Math/Subtract"), false, () => AddNode(NodeType.MathSubtract));
-            menu.AddItem(new GUIContent("Math/Multiply"), false, () => AddNode(NodeType.MathMultiply));
-            menu.AddItem(new GUIContent("Math/Divide"), false, () => AddNode(NodeType.MathDivide));
-
-            if (!_isConditionPanel)
-            {
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Flow/Console.WriteLine"), false,
-                    () => AddNode(NodeType.ConsoleWriteLine));
-            }
-
-            menu.ShowAsContext();
-        }
-
-        private void AddNode(NodeType type)
-        {
-            var id = $"sub_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
-            var nodeData = new NodeData
-            {
-                Id = id,
-                Type = type,
-                Value = GetDefaultValue(type),
-                ValueType = GetDefaultValueType(type),
-                VariableName = ""
+                NodeType.LiteralInt => new IntNode(),
+                NodeType.LiteralFloat => new FloatNode(),
+                NodeType.LiteralBool => new BoolNode(),
+                NodeType.LiteralString => new StringNode(),
+                NodeType.MathAdd => new AddNode(),
+                NodeType.MathSubtract => new SubtractNode(),
+                NodeType.MathMultiply => new MultiplyNode(),
+                NodeType.MathDivide => new DivideNode(),
+                NodeType.MathModulo => new ModuloNode(),
+                NodeType.CompareEqual => new EqualNode(),
+                NodeType.CompareNotEqual => new NotEqualNode(),
+                NodeType.CompareGreater => new GreaterNode(),
+                NodeType.CompareGreaterOrEqual => new GreaterOrEqualNode(),
+                NodeType.CompareLess => new LessNode(),
+                NodeType.CompareLessOrEqual => new LessOrEqualNode(),
+                NodeType.LogicalAnd => new AndNode(),
+                NodeType.LogicalOr => new OrNode(),
+                NodeType.LogicalNot => new NotNode(),
+                NodeType.FlowIf => new IfNode(),
+                NodeType.FlowElse => new ElseNode(),
+                NodeType.FlowFor => new ForNode(),
+                NodeType.FlowWhile => new WhileNode(),
+                NodeType.ConsoleWriteLine => new ConsoleWriteLineNode(),
+                NodeType.DebugLog => new DebugLogNode(),
+                NodeType.IntParse => new IntParseNode(),
+                NodeType.FloatParse => new FloatParseNode(),
+                NodeType.ToStringConvert => new ToStringNode(),
+                NodeType.MathfAbs => new MathfAbsNode(),
+                NodeType.MathfMax => new MathfMaxNode(),
+                NodeType.MathfMin => new MathfMinNode(),
+                NodeType.UnityVector3 => new Vector3CreateNode(),
+                NodeType.UnityGetPosition => new GetPositionNode(),
+                NodeType.UnitySetPosition => new SetPositionNode(),
+                _ => null
             };
+        }
 
-            if (IsLiteral(type))
+        private void DisposeGraph()
+        {
+            if (_graphView != null)
             {
-                nodeData.ExpressionOverride = GetDefaultValue(type);
+                _syncTicker?.Pause();
+                _syncTicker = null;
+                _graphView.graphViewChanged -= OnGraphViewChanged;
+                _graphView.Dispose();
+                _graphView = null;
             }
 
-            _subGraph.Nodes.Add(nodeData);
-
-            Rebuild();
-            OnChanged?.Invoke();
-        }
-
-        private static string FormatNodeTitle(NodeData node)
-        {
-            var baseName = GraphSerializer.GetNodeDisplayName(node.Type);
-            if (!string.IsNullOrEmpty(node.VariableName))
-                return $"{baseName}: {node.VariableName}";
-            return baseName;
-        }
-
-        private static string FormatNodeSubtitle(NodeData node)
-        {
-            if (IsLiteral(node.Type))
+            if (_internalGraph != null)
             {
-                var typeStr = !string.IsNullOrEmpty(node.ValueType) ? node.ValueType : "?";
-                var valStr = !string.IsNullOrEmpty(node.Value) ? node.Value : "?";
-                if (!string.IsNullOrEmpty(node.VariableName))
-                    return $"{typeStr} = {valStr}";
-                return $"{typeStr}: {valStr}";
+                ScriptableObject.DestroyImmediate(_internalGraph);
+                _internalGraph = null;
             }
-
-            return GetNodeTypeLabel(node.Type);
         }
-
-        private static string GetNodeTypeLabel(NodeType type) => type switch
-        {
-            NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply
-                or NodeType.MathDivide or NodeType.MathModulo => "float/int → float/int",
-            NodeType.CompareEqual or NodeType.CompareNotEqual or NodeType.CompareGreater
-                or NodeType.CompareLess or NodeType.CompareGreaterOrEqual
-                or NodeType.CompareLessOrEqual => "any → bool",
-            NodeType.LogicalAnd or NodeType.LogicalOr => "bool → bool",
-            NodeType.LogicalNot => "bool → bool",
-            NodeType.ConsoleWriteLine => "exec + string",
-            NodeType.IntParse => "string → int",
-            NodeType.FloatParse => "string → float",
-            NodeType.ToStringConvert => "any → string",
-            NodeType.MathfAbs => "float → float",
-            NodeType.MathfMax or NodeType.MathfMin => "float, float → float",
-            _ => ""
-        };
-
-        private static Color GetNodeColor(NodeType type)
-        {
-            if (ColorUtility.TryParseHtmlString(GraphSerializer.GetNodeColor(type), out var c))
-                return c;
-            return new Color(0.4f, 0.4f, 0.4f);
-        }
-
-        private static string GetDefaultValue(NodeType type) => type switch
-        {
-            NodeType.LiteralInt => "0",
-            NodeType.LiteralFloat => "0",
-            NodeType.LiteralBool => "false",
-            NodeType.LiteralString => "",
-            _ => ""
-        };
-
-        private static string GetDefaultValueType(NodeType type) => type switch
-        {
-            NodeType.LiteralInt => "int",
-            NodeType.LiteralFloat => "float",
-            NodeType.LiteralBool => "bool",
-            NodeType.LiteralString => "string",
-            _ => ""
-        };
-
-        private static bool IsLiteral(NodeType t) =>
-            t is NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString;
-
-        private struct PortDef
-        {
-            public string name;
-            public string displayName;
-            public string typeName;
-        }
-
-        private static List<PortDef> GetInputPorts(NodeType type) => type switch
-        {
-            NodeType.LiteralInt => new() { new() { name = "inputValue", displayName = "value", typeName = "int" } },
-            NodeType.LiteralFloat => new() { new() { name = "inputValue", displayName = "value", typeName = "float" } },
-            NodeType.LiteralBool => new() { new() { name = "inputValue", displayName = "value", typeName = "bool" } },
-            NodeType.LiteralString => new() { new() { name = "inputValue", displayName = "value", typeName = "string" } },
-            
-            NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply or NodeType.MathDivide or NodeType.MathModulo
-                => new() { new() { name = "inputA", displayName = "A", typeName = "float" }, new() { name = "inputB", displayName = "B", typeName = "float" } },
-            
-            NodeType.CompareEqual or NodeType.CompareNotEqual or NodeType.CompareGreater or NodeType.CompareLess
-                or NodeType.CompareGreaterOrEqual or NodeType.CompareLessOrEqual
-                => new() { new() { name = "left", displayName = "left", typeName = "float" }, new() { name = "right", displayName = "right", typeName = "float" } },
-            
-            NodeType.LogicalAnd or NodeType.LogicalOr
-                => new() { new() { name = "left", displayName = "left", typeName = "bool" }, new() { name = "right", displayName = "right", typeName = "bool" } },
-            NodeType.LogicalNot
-                => new() { new() { name = "input", displayName = "input", typeName = "bool" } },
-            
-            NodeType.ConsoleWriteLine
-                => new() { new() { name = "message", displayName = "message", typeName = "string" } },
-            
-            NodeType.IntParse => new() { new() { name = "input", displayName = "input", typeName = "string" } },
-            NodeType.FloatParse => new() { new() { name = "input", displayName = "input", typeName = "string" } },
-            NodeType.ToStringConvert => new() { new() { name = "input", displayName = "input", typeName = "" } },
-            
-            NodeType.MathfAbs => new() { new() { name = "input", displayName = "input", typeName = "float" } },
-            NodeType.MathfMax or NodeType.MathfMin
-                => new() { new() { name = "inputA", displayName = "A", typeName = "float" }, new() { name = "inputB", displayName = "B", typeName = "float" } },
-            
-            _ => new()
-        };
-
-        private static List<PortDef> GetOutputPorts(NodeType type) => type switch
-        {
-            NodeType.LiteralInt => new() { new() { name = "output", displayName = "output", typeName = "int" } },
-            NodeType.LiteralFloat => new() { new() { name = "output", displayName = "output", typeName = "float" } },
-            NodeType.LiteralBool => new() { new() { name = "output", displayName = "output", typeName = "bool" } },
-            NodeType.LiteralString => new() { new() { name = "output", displayName = "output", typeName = "string" } },
-            
-            NodeType.MathAdd or NodeType.MathSubtract or NodeType.MathMultiply or NodeType.MathDivide or NodeType.MathModulo
-                => new() { new() { name = "output", displayName = "output", typeName = "float" } },
-            
-            NodeType.CompareEqual or NodeType.CompareNotEqual or NodeType.CompareGreater or NodeType.CompareLess
-                or NodeType.CompareGreaterOrEqual or NodeType.CompareLessOrEqual
-                => new() { new() { name = "result", displayName = "result", typeName = "bool" } },
-            
-            NodeType.LogicalAnd or NodeType.LogicalOr or NodeType.LogicalNot
-                => new() { new() { name = "result", displayName = "result", typeName = "bool" } },
-            
-            NodeType.ConsoleWriteLine
-                => new() { new() { name = "execOut", displayName = "exec", typeName = "exec" } },
-            
-            NodeType.IntParse => new() { new() { name = "output", displayName = "output", typeName = "int" } },
-            NodeType.FloatParse => new() { new() { name = "output", displayName = "output", typeName = "float" } },
-            NodeType.ToStringConvert => new() { new() { name = "output", displayName = "output", typeName = "string" } },
-            
-            NodeType.MathfAbs => new() { new() { name = "output", displayName = "output", typeName = "float" } },
-            NodeType.MathfMax or NodeType.MathfMin
-                => new() { new() { name = "output", displayName = "output", typeName = "float" } },
-            
-            _ => new()
-        };
     }
 }
