@@ -28,6 +28,7 @@ namespace VisualScripting.Core.Parsers
         private List<string> _errors;
         private readonly Dictionary<string, string> _symbolToNodeId = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _variableTypes = new Dictionary<string, string>();
+        private const string SubGraphVariableRefMarker = "__varref:";
 
         private bool _inSubGraph;
         private readonly Stack<GraphData> _graphStack = new Stack<GraphData>();
@@ -988,7 +989,9 @@ namespace VisualScripting.Core.Parsers
                 Type = litType,
                 Value = "",
                 ValueType = vType,
-                VariableName = varName
+                VariableName = varName,
+                // Marker: this node is a variable reference helper, not a statement assignment target.
+                ExpressionOverride = SubGraphVariableRefMarker + varName
             });
 
             if (_subGraphVarRefs != null)

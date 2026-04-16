@@ -54,6 +54,11 @@
     font-size: 12px;
 }
 
+/* IMGUI-backed code editor host */
+.code-editor-imgui-container {
+    background-color: rgb(30, 30, 30);
+}
+
 /* Error Panel */
 .error-panel {
     background-color: rgb(51, 26, 26);

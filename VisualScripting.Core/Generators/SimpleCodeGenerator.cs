@@ -350,7 +350,7 @@ namespace VisualScripting.Core.Generators
         private void EmitFor(NodeData forNode, StringBuilder sb, int indent)
         {
             var pad = Pad(indent);
-            var initStr = EmitForInitClause(forNode);
+            var initStr = EmitForInitClause(forNode.Id);
             var condStr = "";
             if (forNode.ConditionSubGraph != null && forNode.ConditionSubGraph.Nodes.Count > 0)
             {
@@ -363,7 +363,7 @@ namespace VisualScripting.Core.Generators
                 condStr = condEdge != null ? EmitCondExpr(condEdge.FromNodeId) : "";
             }
 
-            var incStr = EmitForIncrementClause(forNode);
+            var incStr = EmitForIncrementClause(forNode.Id);
             sb.AppendLine($"{pad}for ({initStr}; {condStr}; {incStr})");
             sb.AppendLine($"{pad}{{");
             if (forNode.BodySubGraph != null && forNode.BodySubGraph.Nodes.Count > 0)
@@ -380,21 +380,10 @@ namespace VisualScripting.Core.Generators
             sb.AppendLine($"{pad}}}");
         }
 
-        private string GenerateForClauseFromSubGraph(GraphData subGraph)
+        private string EmitForInitClause(string forId)
         {
-            if (subGraph == null || subGraph.Nodes.Count == 0) return "";
-            var sb = new StringBuilder();
-            GenerateStatementsFromSubGraph(subGraph, sb, 0);
-            return sb.ToString().Replace(";\r\n", ", ").Replace(";\n", ", ").TrimEnd(',', ' ', '\r', '\n', ';');
-        }
-
-        private string EmitForInitClause(NodeData forNode)
-        {
-            if (forNode.InitSubGraph != null && forNode.InitSubGraph.Nodes.Count > 0)
-                return GenerateForClauseFromSubGraph(forNode.InitSubGraph);
-
             var initEdge = _graph.Edges.FirstOrDefault(
-                e => e.ToNodeId == forNode.Id && e.ToPort == "init");
+                e => e.ToNodeId == forId && e.ToPort == "init");
             if (initEdge == null)
                 return "";
 
@@ -412,13 +401,10 @@ namespace VisualScripting.Core.Generators
             return EmitStmtExpr(fromId);
         }
 
-        private string EmitForIncrementClause(NodeData forNode)
+        private string EmitForIncrementClause(string forId)
         {
-            if (forNode.IncrementSubGraph != null && forNode.IncrementSubGraph.Nodes.Count > 0)
-                return GenerateForClauseFromSubGraph(forNode.IncrementSubGraph);
-
             var incEdge = _graph.Edges.FirstOrDefault(
-                e => e.ToNodeId == forNode.Id && e.ToPort == "increment");
+                e => e.ToNodeId == forId && e.ToPort == "increment");
             if (incEdge == null)
                 return "";
 
@@ -702,21 +688,14 @@ namespace VisualScripting.Core.Generators
                 or NodeType.MathfAbs or NodeType.MathfMax or NodeType.MathfMin;
 
         /// <summary>Узел, с которого начинается цепочка исполнения (первая инструкция или нет входящего execIn).</summary>
-        private bool IsStatementEntryNode(NodeData n)
+        private static bool IsStatementEntryNode(NodeData n)
         {
             if (n.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
                 or NodeType.ConsoleWriteLine)
                 return true;
 
             if (IsLiteral(n.Type) && !string.IsNullOrEmpty(n.VariableName))
-            {
-                // Если это литерал переменной, он является началом инструкции (заявлением/присваиванием), 
-                // только если у него есть входящее значение (inputValue) или задано значение по умолчанию.
-                // Иначе это просто чтение переменной (reference).
-                bool hasInputValue = _graph.Edges.Any(e => e.ToNodeId == n.Id && e.ToPort == "inputValue");
-                if (hasInputValue || !string.IsNullOrEmpty(n.Value))
-                    return true;
-            }
+                return true;
 
             if ((IsBinaryOp(n.Type) || n.Type == NodeType.LogicalNot || IsBuiltinExpressionNode(n.Type)) &&
                 !string.IsNullOrEmpty(n.VariableName))

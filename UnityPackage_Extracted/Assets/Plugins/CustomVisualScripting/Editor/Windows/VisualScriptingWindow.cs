@@ -33,6 +33,10 @@ namespace CustomVisualScripting.Editor.Windows
         private const float MinNodeHeight = 120f;
         private const float AutoLayoutSpacingX = 280f;
         private const float AutoLayoutSpacingY = 180f;
+        private const float AutoLayoutColumnGap = 60f;
+        private const float AutoLayoutRowGap = 40f;
+        private const float OverlapResolveMargin = 24f;
+        private const float BoundsSyncEpsilon = 0.5f;
 
         private CompleteGraphData _currentGraph;
         private BaseGraph _internalGraph;
@@ -48,6 +52,7 @@ namespace CustomVisualScripting.Editor.Windows
         private bool _hasUnsavedChanges = false;
         
         private CSharpProcessRunner _csharpRunner;
+        private bool _forceAutoLayoutNextUpdate;
         
         [MenuItem("Tools/Visual Scripting")]
         public static void OpenWindow()
@@ -131,6 +136,12 @@ namespace CustomVisualScripting.Editor.Windows
             _hasUnsavedChanges = false;
             
             var root = rootVisualElement;
+            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                "Assets/Plugins/CustomVisualScripting/Windows/Styles/WindowStyles.uss");
+            if (styleSheet != null && !root.styleSheets.Contains(styleSheet))
+            {
+                root.styleSheets.Add(styleSheet);
+            }
             
             _toolbar = new CustomToolbar();
             _toolbar.ParseButton.clicked += OnParse;
@@ -186,6 +197,7 @@ namespace CustomVisualScripting.Editor.Windows
             _currentGraph = new CompleteGraphData();
             _currentGraph = GraphConverter.LogicToComplete(result.Graph, _currentGraph);
             _hasUnsavedChanges = true;
+            _forceAutoLayoutNextUpdate = true;
             
             RecreateGraphView();
             
@@ -615,7 +627,24 @@ namespace CustomVisualScripting.Editor.Windows
                 }
 
                 ConfigureNodeViewSizing(_graphView.nodeViews);
-                AutoLayoutIfNeeded();
+                if (_forceAutoLayoutNextUpdate)
+                {
+                    ApplyDagAutoLayout(_graphView.nodeViews);
+                    ResolveOverlaps(_graphView.nodeViews);
+                    _forceAutoLayoutNextUpdate = false;
+                }
+                else
+                {
+                    AutoLayoutIfNeeded();
+                }
+
+                SyncNodeBoundsToLayout(_graphView.nodeViews);
+                _graphView.schedule.Execute(() =>
+                {
+                    if (_graphView?.nodeViews == null)
+                        return;
+                    SyncNodeBoundsToLayout(_graphView.nodeViews);
+                }).ExecuteLater(0);
                 
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
@@ -781,6 +810,8 @@ namespace CustomVisualScripting.Editor.Windows
                 var width = Mathf.Max(rect.width, MinNodeWidth);
                 var height = Mathf.Max(rect.height, MinNodeHeight);
                 nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
+                nodeView.UnregisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
+                nodeView.RegisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
             }
         }
 
@@ -804,18 +835,335 @@ namespace CustomVisualScripting.Editor.Windows
             if (!needLayout)
                 return;
 
-            int columns = Mathf.CeilToInt(Mathf.Sqrt(_graphView.nodeViews.Count));
-            for (int i = 0; i < _graphView.nodeViews.Count; i++)
-            {
-                var view = _graphView.nodeViews[i];
-                int row = i / columns;
-                int col = i % columns;
-                float x = 40f + col * AutoLayoutSpacingX;
-                float y = 40f + row * AutoLayoutSpacingY;
+            ApplyDagAutoLayout(_graphView.nodeViews);
+            ResolveOverlaps(_graphView.nodeViews);
+        }
 
-                var rect = view.GetPosition();
-                view.SetPosition(new Rect(x, y, Mathf.Max(rect.width, MinNodeWidth), Mathf.Max(rect.height, MinNodeHeight)));
+        private void ApplyDagAutoLayout(IReadOnlyList<BaseNodeView> nodeViews, float spacingX = AutoLayoutSpacingX, float spacingY = AutoLayoutSpacingY)
+        {
+            var customViews = nodeViews
+                .Where(v => v?.nodeTarget is CustomBaseNode)
+                .ToList();
+            if (customViews.Count == 0)
+                return;
+
+            var nodeById = new Dictionary<string, BaseNodeView>(StringComparer.Ordinal);
+            foreach (var view in customViews)
+            {
+                var node = view.nodeTarget as CustomBaseNode;
+                if (node != null && !string.IsNullOrEmpty(node.NodeId))
+                    nodeById[node.NodeId] = view;
             }
+
+            var outgoing = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var incoming = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var incomingCount = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var nodeId in nodeById.Keys)
+            {
+                outgoing[nodeId] = new HashSet<string>(StringComparer.Ordinal);
+                incoming[nodeId] = new HashSet<string>(StringComparer.Ordinal);
+                incomingCount[nodeId] = 0;
+            }
+
+            if (_currentGraph?.LogicGraph?.Edges != null)
+            {
+                foreach (var edge in _currentGraph.LogicGraph.Edges)
+                {
+                    if (edge == null || string.IsNullOrEmpty(edge.FromNodeId) || string.IsNullOrEmpty(edge.ToNodeId))
+                        continue;
+                    if (!nodeById.ContainsKey(edge.FromNodeId) || !nodeById.ContainsKey(edge.ToNodeId))
+                        continue;
+                    if (edge.FromNodeId == edge.ToNodeId)
+                        continue;
+
+                    if (outgoing[edge.FromNodeId].Add(edge.ToNodeId))
+                    {
+                        incoming[edge.ToNodeId].Add(edge.FromNodeId);
+                        incomingCount[edge.ToNodeId]++;
+                    }
+                }
+            }
+
+            var nodeTypeById = new Dictionary<string, NodeType>(StringComparer.Ordinal);
+            if (_currentGraph?.LogicGraph?.Nodes != null)
+            {
+                foreach (var n in _currentGraph.LogicGraph.Nodes)
+                {
+                    if (n != null && !string.IsNullOrEmpty(n.Id))
+                        nodeTypeById[n.Id] = n.Type;
+                }
+            }
+
+            var inDegreeOriginal = incomingCount.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            var depthById = new Dictionary<string, int>(StringComparer.Ordinal);
+            var rootIds = incomingCount
+                .Where(kv => kv.Value == 0)
+                .Select(kv => kv.Key)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
+            foreach (var rootId in rootIds)
+                depthById[rootId] = 0;
+            var queue = new Queue<string>(rootIds);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                int currentDepth = depthById.TryGetValue(current, out var d) ? d : 0;
+
+                var sortedNext = outgoing[current].OrderBy(id => id, StringComparer.Ordinal);
+                foreach (var next in sortedNext)
+                {
+                    int nextDepth = currentDepth + 1;
+                    if (!depthById.TryGetValue(next, out var existingDepth) || nextDepth > existingDepth)
+                        depthById[next] = nextDepth;
+
+                    incomingCount[next]--;
+                    if (incomingCount[next] == 0)
+                        queue.Enqueue(next);
+                }
+            }
+
+            // Fallback for cycles/unresolved nodes: place them into deterministic extra layers.
+            int maxDepth = depthById.Count == 0 ? 0 : depthById.Values.Max();
+            var unresolvedIds = nodeById.Keys
+                .Where(id => !depthById.ContainsKey(id))
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
+            for (int i = 0; i < unresolvedIds.Count; i++)
+                depthById[unresolvedIds[i]] = maxDepth + 1 + i;
+
+            var layers = depthById
+                .GroupBy(kv => kv.Value)
+                .OrderBy(g => g.Key)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(kv => kv.Key).ToList());
+
+            var laneCache = new Dictionary<string, int>(StringComparer.Ordinal);
+            int GetBranchLane(string nodeId, HashSet<string> visiting = null)
+            {
+                if (laneCache.TryGetValue(nodeId, out var cached))
+                    return cached;
+
+                if (nodeTypeById.TryGetValue(nodeId, out var type))
+                {
+                    if (type == NodeType.FlowIf)
+                    {
+                        laneCache[nodeId] = 1;
+                        return 1;
+                    }
+                    if (type == NodeType.FlowElse)
+                    {
+                        laneCache[nodeId] = 2;
+                        return 2;
+                    }
+                }
+
+                visiting ??= new HashSet<string>(StringComparer.Ordinal);
+                if (!visiting.Add(nodeId))
+                    return 0;
+
+                int lane = 0;
+                foreach (var parent in incoming[nodeId])
+                {
+                    int parentLane = GetBranchLane(parent, visiting);
+                    if (parentLane > lane)
+                        lane = parentLane;
+                }
+                visiting.Remove(nodeId);
+                laneCache[nodeId] = lane;
+                return lane;
+            }
+
+            int TypePriority(string nodeId)
+            {
+                if (!nodeTypeById.TryGetValue(nodeId, out var type))
+                    return 50;
+
+                switch (type)
+                {
+                    case NodeType.LiteralBool:
+                    case NodeType.LiteralInt:
+                    case NodeType.LiteralFloat:
+                    case NodeType.LiteralString:
+                        return 10;
+
+                    case NodeType.MathAdd:
+                    case NodeType.MathSubtract:
+                    case NodeType.MathMultiply:
+                    case NodeType.MathDivide:
+                    case NodeType.MathModulo:
+                    case NodeType.CompareEqual:
+                    case NodeType.CompareGreater:
+                    case NodeType.CompareLess:
+                    case NodeType.CompareNotEqual:
+                    case NodeType.CompareGreaterOrEqual:
+                    case NodeType.CompareLessOrEqual:
+                    case NodeType.LogicalAnd:
+                    case NodeType.LogicalOr:
+                    case NodeType.LogicalNot:
+                    case NodeType.MathfAbs:
+                    case NodeType.MathfMax:
+                    case NodeType.MathfMin:
+                    case NodeType.IntParse:
+                    case NodeType.FloatParse:
+                    case NodeType.ToStringConvert:
+                    case NodeType.UnityVector3:
+                    case NodeType.UnityGetPosition:
+                        return 20;
+
+                    case NodeType.FlowIf:
+                    case NodeType.FlowElse:
+                    case NodeType.FlowFor:
+                    case NodeType.FlowWhile:
+                        return 30;
+
+                    case NodeType.ConsoleWriteLine:
+                    case NodeType.DebugLog:
+                    case NodeType.UnitySetPosition:
+                        return 40;
+
+                    default:
+                        return 50;
+                }
+            }
+
+            foreach (var layer in layers.Values)
+            {
+                // Stable ordering inside a layer:
+                // 1) branch lanes (if/else in parallel rows),
+                // 2) semantic node type priority (source -> op -> result),
+                // 3) graph degree hints,
+                // 4) NodeId as deterministic fallback.
+                layer.Sort((a, b) =>
+                {
+                    int laneCmp = GetBranchLane(a).CompareTo(GetBranchLane(b));
+                    if (laneCmp != 0) return laneCmp;
+
+                    int typeCmp = TypePriority(a).CompareTo(TypePriority(b));
+                    if (typeCmp != 0) return typeCmp;
+
+                    int inCmp = inDegreeOriginal[a].CompareTo(inDegreeOriginal[b]);
+                    if (inCmp != 0) return inCmp;
+
+                    int outCmp = outgoing[b].Count.CompareTo(outgoing[a].Count);
+                    if (outCmp != 0) return outCmp;
+
+                    return StringComparer.Ordinal.Compare(a, b);
+                });
+            }
+
+            float columnGap = Mathf.Max(AutoLayoutColumnGap, spacingX * 0.2f);
+            float rowGap = Mathf.Max(AutoLayoutRowGap, spacingY * 0.2f);
+            const float startX = 40f;
+            const float startY = 40f;
+            float columnX = startX;
+            foreach (var layerEntry in layers)
+            {
+                var ids = layerEntry.Value;
+                float layerMaxWidth = MinNodeWidth;
+                float rowY = startY;
+                for (int row = 0; row < ids.Count; row++)
+                {
+                    var view = nodeById[ids[row]];
+                    var rect = view.GetPosition();
+                    float width = Mathf.Max(rect.width, MinNodeWidth);
+                    float height = Mathf.Max(rect.height, MinNodeHeight);
+                    layerMaxWidth = Mathf.Max(layerMaxWidth, width);
+                    view.SetPosition(new Rect(
+                        columnX,
+                        rowY,
+                        width,
+                        height));
+                    rowY += height + rowGap;
+                }
+                columnX += layerMaxWidth + columnGap;
+            }
+        }
+
+        private void ResolveOverlaps(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            var customViews = nodeViews
+                .Where(v => v?.nodeTarget is CustomBaseNode)
+                .ToList();
+            if (customViews.Count <= 1)
+                return;
+
+            const int maxPasses = 4;
+            for (int pass = 0; pass < maxPasses; pass++)
+            {
+                bool movedAny = false;
+                for (int i = 0; i < customViews.Count; i++)
+                {
+                    var aView = customViews[i];
+                    var a = aView.GetPosition();
+                    for (int j = i + 1; j < customViews.Count; j++)
+                    {
+                        var bView = customViews[j];
+                        var b = bView.GetPosition();
+                        if (!a.Overlaps(b))
+                            continue;
+
+                        float moveX = Mathf.Max(0f, a.xMax - b.xMin) + OverlapResolveMargin;
+                        float moveY = Mathf.Max(0f, a.yMax - b.yMin) + OverlapResolveMargin;
+                        if (moveX <= 0f && moveY <= 0f)
+                            continue;
+
+                        if (moveX <= moveY)
+                            b.x += moveX;
+                        else
+                            b.y += moveY;
+
+                        bView.SetPosition(b);
+                        movedAny = true;
+                    }
+                }
+
+                if (!movedAny)
+                    return;
+            }
+        }
+
+        private void OnNodeGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (evt?.currentTarget is not BaseNodeView nodeView)
+                return;
+
+            nodeView.schedule.Execute(() => SyncNodeBoundsToLayout(nodeView)).ExecuteLater(0);
+        }
+
+        private static void SyncNodeBoundsToLayout(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            if (nodeViews == null)
+                return;
+
+            foreach (var nodeView in nodeViews)
+                SyncNodeBoundsToLayout(nodeView);
+        }
+
+        private static void SyncNodeBoundsToLayout(BaseNodeView nodeView)
+        {
+            if (nodeView == null)
+                return;
+
+            var rect = nodeView.GetPosition();
+            float resolvedWidth = nodeView.resolvedStyle.width;
+            float resolvedHeight = nodeView.resolvedStyle.height;
+            float layoutWidth = nodeView.layout.width;
+            float layoutHeight = nodeView.layout.height;
+            float width = Mathf.Max(rect.width, MinNodeWidth, resolvedWidth, layoutWidth);
+            float height = Mathf.Max(rect.height, MinNodeHeight, resolvedHeight, layoutHeight);
+            if (float.IsNaN(width) || float.IsInfinity(width) ||
+                float.IsNaN(height) || float.IsInfinity(height))
+                return;
+
+            if (Mathf.Abs(width - rect.width) <= BoundsSyncEpsilon &&
+                Mathf.Abs(height - rect.height) <= BoundsSyncEpsilon)
+                return;
+
+            nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
+            nodeView.RefreshPorts();
+            nodeView.RefreshExpandedState();
         }
 
         private static bool HasHeavyOverlap(IReadOnlyList<BaseNodeView> nodeViews)

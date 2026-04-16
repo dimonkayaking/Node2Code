@@ -9,6 +9,7 @@ namespace VisualScripting.Core.Generators
 {
     public class SimpleCodeGenerator
     {
+        private const string SubGraphVariableRefMarker = "__varref:";
         private Dictionary<string, NodeData> _map = new();
         private GraphData _graph = new();
         private HashSet<string> _declared = new();
@@ -131,6 +132,8 @@ namespace VisualScripting.Core.Generators
             if (string.IsNullOrEmpty(vn))
                 return;
             if (IsPlaceholderVariableRefLiteral(node))
+                return;
+            if (IsSubGraphVariableRefLiteral(node))
                 return;
 
             // Если есть ExpressionOverride — используем его
@@ -763,7 +766,8 @@ namespace VisualScripting.Core.Generators
                 or NodeType.ConsoleWriteLine)
                 return true;
 
-            if (IsLiteral(n.Type) && !string.IsNullOrEmpty(n.VariableName) && !IsPlaceholderVariableRefLiteral(n))
+            if (IsLiteral(n.Type) && !string.IsNullOrEmpty(n.VariableName) &&
+                !IsPlaceholderVariableRefLiteral(n) && !IsSubGraphVariableRefLiteral(n))
                 return true;
 
             if ((IsBinaryOp(n.Type) || n.Type == NodeType.LogicalNot || IsBuiltinExpressionNode(n.Type)) &&
@@ -783,6 +787,20 @@ namespace VisualScripting.Core.Generators
                 return false;
 
             // Subgraph variable refs are expression helpers and must not be emitted as statements.
+            var hasInputValue = _graph.Edges.Any(e =>
+                e.ToNodeId == node.Id &&
+                string.Equals(e.ToPort, "inputValue", StringComparison.OrdinalIgnoreCase));
+            return !hasInputValue;
+        }
+
+        private bool IsSubGraphVariableRefLiteral(NodeData node)
+        {
+            if (!IsLiteral(node.Type) || string.IsNullOrEmpty(node.VariableName))
+                return false;
+            if (string.IsNullOrEmpty(node.ExpressionOverride) ||
+                !node.ExpressionOverride.StartsWith(SubGraphVariableRefMarker, StringComparison.Ordinal))
+                return false;
+
             var hasInputValue = _graph.Edges.Any(e =>
                 e.ToNodeId == node.Id &&
                 string.Equals(e.ToPort, "inputValue", StringComparison.OrdinalIgnoreCase));

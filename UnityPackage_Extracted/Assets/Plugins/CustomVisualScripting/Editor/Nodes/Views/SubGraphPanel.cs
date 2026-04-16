@@ -24,10 +24,19 @@ namespace CustomVisualScripting.Editor.Nodes.Views
     {
         public event Action OnChanged;
         public event Action<SubGraphPanel, Vector2> OnPanelResized;
-        private const float MinPanelWidth = 320f;
+        private const float MinPanelWidth = 520f;
         private const float MinPanelHeight = 180f;
-        private const float MinNodeWidth = 220f;
-        private const float MinNodeHeight = 120f;
+        private const float MinNodeWidth = 420f;
+        private const float MinNodeHeight = 140f;
+
+        // Nested graphs force node rect to min size; flow nodes need room for SubGraphPanel chrome
+        // (MinPanelHeight per panel + title/ports) or headers/bodies overlap visually.
+        private const float NestedFlowMinWidthIfWhile = 540f;
+        private const float NestedFlowMinHeightIfWhile = 520f;
+        private const float NestedFlowMinWidthElse = 540f;
+        private const float NestedFlowMinHeightElse = 320f;
+        private const float NestedFlowMinWidthFor = 640f;
+        private const float NestedFlowMinHeightFor = 600f;
 
         private readonly string _title;
         private readonly bool _isConditionPanel;
@@ -180,9 +189,21 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _syncTicker = _graphView.schedule.Execute(SyncBackFromGraphView).Every(300);
 
             RestoreEdges(nodeMap);
-            ConfigureNodeViewSizing(_graphView.nodeViews);
-            AutoLayoutIfNeeded(_graphView.nodeViews);
             _content.Add(_graphView);
+            ConfigureNodeViewSizing(_graphView.nodeViews);
+            RefreshNodeViewsLayout(_graphView.nodeViews);
+            AutoLayoutIfNeeded(_graphView.nodeViews);
+            RefreshNodeViewsLayout(_graphView.nodeViews);
+
+            // One extra deferred pass after mount: GraphView/Ports geometry settles asynchronously.
+            _graphView.schedule.Execute(() =>
+            {
+                if (_graphView == null)
+                    return;
+                ConfigureNodeViewSizing(_graphView.nodeViews);
+                AutoLayoutIfNeeded(_graphView.nodeViews);
+                RefreshNodeViewsLayout(_graphView.nodeViews);
+            }).ExecuteLater(50);
         }
 
         private GraphViewChange OnGraphViewChanged(GraphViewChange change)
@@ -460,39 +481,311 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 if (nodeView == null)
                     continue;
 
+                GetNestedSubGraphFlowMinDimensions(nodeView, out var minW, out var minH);
+
                 nodeView.capabilities |= Capabilities.Resizable;
-                nodeView.style.minWidth = MinNodeWidth;
-                nodeView.style.minHeight = MinNodeHeight;
+                nodeView.style.minWidth = minW;
+                nodeView.style.minHeight = minH;
 
                 var rect = nodeView.GetPosition();
+                var width = Mathf.Max(rect.width, minW);
+                var height = Mathf.Max(rect.height, minH);
+
+                // Force actual width/height, not only min constraints, to prevent compressed internals.
+                nodeView.style.width = width;
+                nodeView.style.height = height;
                 nodeView.SetPosition(new Rect(
                     rect.x,
                     rect.y,
-                    Mathf.Max(rect.width, MinNodeWidth),
-                    Mathf.Max(rect.height, MinNodeHeight)));
+                    width,
+                    height));
             }
         }
 
-        private static void AutoLayoutIfNeeded(IReadOnlyList<BaseNodeView> nodeViews)
+        private static void GetNestedSubGraphFlowMinDimensions(BaseNodeView nodeView, out float minW, out float minH)
+        {
+            minW = MinNodeWidth;
+            minH = MinNodeHeight;
+
+            switch (nodeView.nodeTarget)
+            {
+                case IfNode:
+                case WhileNode:
+                    minW = NestedFlowMinWidthIfWhile;
+                    minH = NestedFlowMinHeightIfWhile;
+                    break;
+                case ElseNode:
+                    minW = NestedFlowMinWidthElse;
+                    minH = NestedFlowMinHeightElse;
+                    break;
+                case ForNode:
+                    minW = NestedFlowMinWidthFor;
+                    minH = NestedFlowMinHeightFor;
+                    break;
+            }
+        }
+
+        private void AutoLayoutIfNeeded(IReadOnlyList<BaseNodeView> nodeViews)
         {
             if (nodeViews == null || nodeViews.Count == 0)
                 return;
             if (!HasHeavyOverlap(nodeViews))
                 return;
 
-            int columns = Mathf.CeilToInt(Mathf.Sqrt(nodeViews.Count));
-            for (int i = 0; i < nodeViews.Count; i++)
+            ApplyDagAutoLayout(nodeViews);
+            if (HasHeavyOverlap(nodeViews))
+                ApplyDagAutoLayout(nodeViews, 420f, 280f);
+        }
+
+        private void ApplyDagAutoLayout(IReadOnlyList<BaseNodeView> nodeViews, float spacingX = 280f, float spacingY = 180f)
+        {
+            var customViews = nodeViews
+                .Where(v => v?.nodeTarget is CustomBaseNode)
+                .ToList();
+            if (customViews.Count == 0)
+                return;
+
+            var nodeById = new Dictionary<string, BaseNodeView>(StringComparer.Ordinal);
+            foreach (var view in customViews)
             {
-                int row = i / columns;
-                int col = i % columns;
-                float x = 30f + col * 280f;
-                float y = 30f + row * 180f;
-                var rect = nodeViews[i].GetPosition();
-                nodeViews[i].SetPosition(new Rect(
-                    x,
-                    y,
-                    Mathf.Max(rect.width, MinNodeWidth),
-                    Mathf.Max(rect.height, MinNodeHeight)));
+                var node = view.nodeTarget as CustomBaseNode;
+                if (node != null && !string.IsNullOrEmpty(node.NodeId))
+                    nodeById[node.NodeId] = view;
+            }
+            if (nodeById.Count == 0)
+                return;
+
+            var outgoing = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var incoming = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var incomingCount = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var nodeId in nodeById.Keys)
+            {
+                outgoing[nodeId] = new HashSet<string>(StringComparer.Ordinal);
+                incoming[nodeId] = new HashSet<string>(StringComparer.Ordinal);
+                incomingCount[nodeId] = 0;
+            }
+
+            if (_subGraph?.Edges != null)
+            {
+                foreach (var edge in _subGraph.Edges)
+                {
+                    if (edge == null || string.IsNullOrEmpty(edge.FromNodeId) || string.IsNullOrEmpty(edge.ToNodeId))
+                        continue;
+                    if (!nodeById.ContainsKey(edge.FromNodeId) || !nodeById.ContainsKey(edge.ToNodeId))
+                        continue;
+                    if (edge.FromNodeId == edge.ToNodeId)
+                        continue;
+
+                    if (outgoing[edge.FromNodeId].Add(edge.ToNodeId))
+                    {
+                        incoming[edge.ToNodeId].Add(edge.FromNodeId);
+                        incomingCount[edge.ToNodeId]++;
+                    }
+                }
+            }
+
+            var nodeTypeById = new Dictionary<string, NodeType>(StringComparer.Ordinal);
+            if (_subGraph?.Nodes != null)
+            {
+                foreach (var n in _subGraph.Nodes)
+                {
+                    if (n != null && !string.IsNullOrEmpty(n.Id))
+                        nodeTypeById[n.Id] = n.Type;
+                }
+            }
+
+            var inDegreeOriginal = incomingCount.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            var depthById = new Dictionary<string, int>(StringComparer.Ordinal);
+            var rootIds = incomingCount
+                .Where(kv => kv.Value == 0)
+                .Select(kv => kv.Key)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
+            foreach (var rootId in rootIds)
+                depthById[rootId] = 0;
+            var queue = new Queue<string>(rootIds);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                int currentDepth = depthById.TryGetValue(current, out var d) ? d : 0;
+
+                foreach (var next in outgoing[current].OrderBy(id => id, StringComparer.Ordinal))
+                {
+                    int nextDepth = currentDepth + 1;
+                    if (!depthById.TryGetValue(next, out var existingDepth) || nextDepth > existingDepth)
+                        depthById[next] = nextDepth;
+
+                    incomingCount[next]--;
+                    if (incomingCount[next] == 0)
+                        queue.Enqueue(next);
+                }
+            }
+
+            int maxDepth = depthById.Count == 0 ? 0 : depthById.Values.Max();
+            var unresolvedIds = nodeById.Keys
+                .Where(id => !depthById.ContainsKey(id))
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
+            for (int i = 0; i < unresolvedIds.Count; i++)
+                depthById[unresolvedIds[i]] = maxDepth + 1 + i;
+
+            var layers = depthById
+                .GroupBy(kv => kv.Value)
+                .OrderBy(g => g.Key)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(kv => kv.Key).ToList());
+
+            var laneCache = new Dictionary<string, int>(StringComparer.Ordinal);
+            int GetBranchLane(string nodeId, HashSet<string> visiting = null)
+            {
+                if (laneCache.TryGetValue(nodeId, out var cached))
+                    return cached;
+
+                if (nodeTypeById.TryGetValue(nodeId, out var type))
+                {
+                    if (type == NodeType.FlowIf)
+                    {
+                        laneCache[nodeId] = 1;
+                        return 1;
+                    }
+                    if (type == NodeType.FlowElse)
+                    {
+                        laneCache[nodeId] = 2;
+                        return 2;
+                    }
+                }
+
+                visiting ??= new HashSet<string>(StringComparer.Ordinal);
+                if (!visiting.Add(nodeId))
+                    return 0;
+
+                int lane = 0;
+                foreach (var parent in incoming[nodeId])
+                {
+                    int parentLane = GetBranchLane(parent, visiting);
+                    if (parentLane > lane)
+                        lane = parentLane;
+                }
+                visiting.Remove(nodeId);
+                laneCache[nodeId] = lane;
+                return lane;
+            }
+
+            int TypePriority(string nodeId)
+            {
+                if (!nodeTypeById.TryGetValue(nodeId, out var type))
+                    return 50;
+
+                switch (type)
+                {
+                    case NodeType.LiteralBool:
+                    case NodeType.LiteralInt:
+                    case NodeType.LiteralFloat:
+                    case NodeType.LiteralString:
+                        return 10;
+
+                    case NodeType.MathAdd:
+                    case NodeType.MathSubtract:
+                    case NodeType.MathMultiply:
+                    case NodeType.MathDivide:
+                    case NodeType.MathModulo:
+                    case NodeType.CompareEqual:
+                    case NodeType.CompareGreater:
+                    case NodeType.CompareLess:
+                    case NodeType.CompareNotEqual:
+                    case NodeType.CompareGreaterOrEqual:
+                    case NodeType.CompareLessOrEqual:
+                    case NodeType.LogicalAnd:
+                    case NodeType.LogicalOr:
+                    case NodeType.LogicalNot:
+                    case NodeType.MathfAbs:
+                    case NodeType.MathfMax:
+                    case NodeType.MathfMin:
+                    case NodeType.IntParse:
+                    case NodeType.FloatParse:
+                    case NodeType.ToStringConvert:
+                    case NodeType.UnityVector3:
+                    case NodeType.UnityGetPosition:
+                        return 20;
+
+                    case NodeType.FlowIf:
+                    case NodeType.FlowElse:
+                    case NodeType.FlowFor:
+                    case NodeType.FlowWhile:
+                        return 30;
+
+                    case NodeType.ConsoleWriteLine:
+                    case NodeType.DebugLog:
+                    case NodeType.UnitySetPosition:
+                        return 40;
+
+                    default:
+                        return 50;
+                }
+            }
+
+            foreach (var layer in layers.Values)
+            {
+                layer.Sort((a, b) =>
+                {
+                    int laneCmp = GetBranchLane(a).CompareTo(GetBranchLane(b));
+                    if (laneCmp != 0) return laneCmp;
+
+                    int typeCmp = TypePriority(a).CompareTo(TypePriority(b));
+                    if (typeCmp != 0) return typeCmp;
+
+                    int inCmp = inDegreeOriginal[a].CompareTo(inDegreeOriginal[b]);
+                    if (inCmp != 0) return inCmp;
+
+                    int outCmp = outgoing[b].Count.CompareTo(outgoing[a].Count);
+                    if (outCmp != 0) return outCmp;
+
+                    return StringComparer.Ordinal.Compare(a, b);
+                });
+            }
+
+            float columnGap = Mathf.Max(40f, spacingX * 0.2f);
+            float rowGap = Mathf.Max(24f, spacingY * 0.2f);
+            const float startX = 30f;
+            const float startY = 30f;
+            float columnX = startX;
+            foreach (var layerEntry in layers)
+            {
+                var ids = layerEntry.Value;
+                float layerMaxWidth = MinNodeWidth;
+                float rowY = startY;
+                for (int row = 0; row < ids.Count; row++)
+                {
+                    var view = nodeById[ids[row]];
+                    var rect = view.GetPosition();
+                    float width = Mathf.Max(rect.width, MinNodeWidth);
+                    float height = Mathf.Max(rect.height, MinNodeHeight);
+                    layerMaxWidth = Mathf.Max(layerMaxWidth, width);
+                    view.SetPosition(new Rect(
+                        columnX,
+                        rowY,
+                        width,
+                        height));
+                    rowY += height + rowGap;
+                }
+                columnX += layerMaxWidth + columnGap;
+            }
+        }
+
+        private static void RefreshNodeViewsLayout(IReadOnlyList<BaseNodeView> nodeViews)
+        {
+            if (nodeViews == null)
+                return;
+
+            foreach (var nodeView in nodeViews)
+            {
+                if (nodeView == null)
+                    continue;
+
+                nodeView.RefreshPorts();
+                nodeView.RefreshExpandedState();
             }
         }
 

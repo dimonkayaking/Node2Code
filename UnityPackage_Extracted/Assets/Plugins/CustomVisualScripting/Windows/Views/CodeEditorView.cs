@@ -1,30 +1,43 @@
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityEditor;
 using System.Text;
 
 namespace CustomVisualScripting.Windows.Views
 {
     public class CodeEditorView : VisualElement
     {
-        private TextField _textField;
-        private TextField _lineNumbersField;
-        private ScrollView _codeScrollView;
-        private ScrollView _lineScrollView;
-        private bool _syncingScroll;
-        
+        private const float GutterWidth = 48f;
+        private const float OuterHorizontalPadding = 8f;
+        private const float OuterVerticalPadding = 6f;
+        private const float CodeGapFromGutter = 10f;
+        private const string CodeControlName = "CodeEditorTextArea";
+
+        private readonly IMGUIContainer _imguiEditor;
+
+        private string _code = string.Empty;
+        private string _lineNumbers = "1";
+        private int _lineCount = 1;
+        private int _maxLineLength = 1;
+
+        private Vector2 _scrollPosition;
+        private GUIStyle _codeStyle;
+        private GUIStyle _lineNumberStyle;
+        private int _lastCursorIndex = -1;
+        private int _lastSelectIndex = -1;
+        private bool _manualScrollOverride;
+
         public string Code
         {
-            get => _textField?.value ?? "";
+            get => _code;
             set
             {
-                if (_textField != null)
-                {
-                    _textField.value = value;
-                    UpdateLineNumbers();
-                }
+                _code = value ?? string.Empty;
+                RebuildLineMetadata();
+                _imguiEditor?.MarkDirtyRepaint();
             }
         }
-        
+
         public CodeEditorView()
         {
             var label = new Label("Код для парсинга:");
@@ -33,131 +46,266 @@ namespace CustomVisualScripting.Windows.Views
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = Color.white;
             Add(label);
-            
-            _textField = new TextField
+
+            _imguiEditor = new IMGUIContainer(DrawEditor)
             {
-                multiline = true,
-                value = ""
+                style =
+                {
+                    flexGrow = 1,
+                    minHeight = 0
+                }
             };
+            _imguiEditor.AddToClassList("code-editor-imgui-container");
+            Add(_imguiEditor);
 
-            var editorRow = new VisualElement();
-            editorRow.style.flexDirection = FlexDirection.Row;
-            editorRow.style.flexGrow = 1;
-            editorRow.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f);
-            editorRow.style.borderTopWidth = 1;
-            editorRow.style.borderBottomWidth = 1;
-            editorRow.style.borderLeftWidth = 1;
-            editorRow.style.borderRightWidth = 1;
-            editorRow.style.borderTopColor = new Color(0.24f, 0.24f, 0.24f);
-            editorRow.style.borderBottomColor = new Color(0.24f, 0.24f, 0.24f);
-            editorRow.style.borderLeftColor = new Color(0.24f, 0.24f, 0.24f);
-            editorRow.style.borderRightColor = new Color(0.24f, 0.24f, 0.24f);
-
-            var gutter = new VisualElement();
-            gutter.style.width = 48;
-            gutter.style.backgroundColor = new Color(0.10f, 0.10f, 0.10f);
-            gutter.style.borderRightWidth = 1;
-            gutter.style.borderRightColor = new Color(0.20f, 0.20f, 0.20f);
-
-            _lineNumbersField = new TextField
-            {
-                multiline = true,
-                isReadOnly = true,
-                value = "1"
-            };
-            _lineNumbersField.style.flexGrow = 1;
-            _lineNumbersField.style.unityTextAlign = TextAnchor.UpperRight;
-            _lineNumbersField.style.backgroundColor = new Color(0.10f, 0.10f, 0.10f);
-            _lineNumbersField.style.color = new Color(0.45f, 0.45f, 0.45f);
-            _lineNumbersField.style.fontSize = 13;
-            _lineNumbersField.style.paddingRight = 6;
-            _lineNumbersField.style.paddingLeft = 2;
-            _lineNumbersField.style.borderTopWidth = 0;
-            _lineNumbersField.style.borderBottomWidth = 0;
-            _lineNumbersField.style.borderLeftWidth = 0;
-            _lineNumbersField.style.borderRightWidth = 0;
-            _lineNumbersField.pickingMode = PickingMode.Ignore;
-            gutter.Add(_lineNumbersField);
-
-            _textField.style.flexGrow = 1;
-            _textField.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f);
-            _textField.style.unityTextAlign = TextAnchor.UpperLeft;
-            _textField.style.color = new Color(0.9f, 0.9f, 0.9f);
-            _textField.style.fontSize = 13;
-            _textField.style.paddingLeft = 6;
-            _textField.style.paddingRight = 6;
-            _textField.RegisterValueChangedCallback(_ => UpdateLineNumbers());
-
-            editorRow.Add(gutter);
-            editorRow.Add(_textField);
-            Add(editorRow);
-            RegisterCallback<AttachToPanelEvent>(_ => SetupScrollSync());
-            UpdateLineNumbers();
-            
             style.flexGrow = 1;
+            style.minHeight = 0;
             style.marginLeft = 5;
             style.marginRight = 5;
+
+            RebuildLineMetadata();
         }
-        
+
         public new void Clear()
         {
-            _textField.value = "";
-            UpdateLineNumbers();
+            Code = string.Empty;
+            _scrollPosition = Vector2.zero;
+            _lastCursorIndex = -1;
+            _lastSelectIndex = -1;
+            _manualScrollOverride = false;
         }
 
-        private void UpdateLineNumbers()
+        private void DrawEditor()
         {
-            var code = _textField?.value ?? string.Empty;
-            int lineCount = 1;
-            for (int i = 0; i < code.Length; i++)
+            EnsureStyles();
+
+            var viewportRect = GUILayoutUtility.GetRect(
+                0f,
+                100000f,
+                0f,
+                100000f,
+                GUILayout.ExpandWidth(true),
+                GUILayout.ExpandHeight(true));
+
+            DrawEditorBackground(viewportRect);
+            DrawEditorContents(viewportRect);
+        }
+
+        private void DrawEditorBackground(Rect rect)
+        {
+            EditorLikeDrawRect(rect, new Color(0.12f, 0.12f, 0.12f));
+            EditorLikeDrawRect(new Rect(rect.x, rect.y, 1f, rect.height), new Color(0.24f, 0.24f, 0.24f));
+            EditorLikeDrawRect(new Rect(rect.xMax - 1f, rect.y, 1f, rect.height), new Color(0.24f, 0.24f, 0.24f));
+            EditorLikeDrawRect(new Rect(rect.x, rect.y, rect.width, 1f), new Color(0.24f, 0.24f, 0.24f));
+            EditorLikeDrawRect(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), new Color(0.24f, 0.24f, 0.24f));
+        }
+
+        private void DrawEditorContents(Rect viewportRect)
+        {
+            const float scrollBarAllowance = 24f;
+            float lineHeight = _codeStyle.lineHeight > 0f ? _codeStyle.lineHeight : 16f;
+            float charWidth = Mathf.Max(6f, _codeStyle.CalcSize(new GUIContent("M")).x);
+
+            float estimatedTextWidth = _maxLineLength * charWidth + _codeStyle.padding.left + _codeStyle.padding.right;
+            float contentWidth = Mathf.Max(
+                viewportRect.width - scrollBarAllowance,
+                GutterWidth + OuterHorizontalPadding * 2f + CodeGapFromGutter + estimatedTextWidth);
+            float contentHeight = Mathf.Max(
+                viewportRect.height - scrollBarAllowance,
+                _lineCount * lineHeight + OuterVerticalPadding * 2f + _codeStyle.padding.top + _codeStyle.padding.bottom);
+
+            var contentRect = new Rect(0f, 0f, contentWidth, contentHeight);
+            var evt = Event.current;
+            if (evt != null && evt.type == EventType.ScrollWheel && viewportRect.Contains(evt.mousePosition))
+                _manualScrollOverride = true;
+
+            _scrollPosition = GUI.BeginScrollView(viewportRect, _scrollPosition, contentRect, true, true);
+            DrawScrollContent(contentRect, viewportRect, lineHeight);
+            GUI.EndScrollView();
+        }
+
+        private void DrawScrollContent(Rect contentRect, Rect viewportRect, float lineHeight)
+        {
+            var gutterRect = new Rect(contentRect.x, contentRect.y, GutterWidth, contentRect.height);
+            EditorLikeDrawRect(gutterRect, new Color(0.10f, 0.10f, 0.10f));
+            EditorLikeDrawRect(new Rect(gutterRect.xMax - 1f, gutterRect.y, 1f, gutterRect.height), new Color(0.20f, 0.20f, 0.20f));
+
+            var lineRect = new Rect(
+                gutterRect.x + 4f,
+                gutterRect.y + OuterVerticalPadding,
+                GutterWidth - 10f,
+                Mathf.Max(lineHeight, contentRect.height - OuterVerticalPadding * 2f));
+            GUI.Label(lineRect, _lineNumbers, _lineNumberStyle);
+
+            float codeX = gutterRect.xMax + CodeGapFromGutter;
+            var codeRect = new Rect(
+                codeX,
+                contentRect.y + OuterVerticalPadding,
+                Mathf.Max(1f, contentRect.width - codeX - OuterHorizontalPadding),
+                Mathf.Max(lineHeight, contentRect.height - OuterVerticalPadding * 2f));
+
+            EditorGUIUtility.AddCursorRect(codeRect, MouseCursor.Text);
+            GUI.SetNextControlName(CodeControlName);
+            string next = GUI.TextArea(codeRect, _code, _codeStyle);
+            bool textChangedThisFrame = false;
+            if (!string.Equals(next, _code))
             {
-                if (code[i] == '\n')
-                    lineCount++;
+                _code = next;
+                RebuildLineMetadata();
+                textChangedThisFrame = true;
             }
 
-            var sb = new StringBuilder(lineCount * 4);
-            for (int i = 1; i <= lineCount; i++)
+            EnsureCaretVisible(codeRect, viewportRect, lineHeight, textChangedThisFrame);
+        }
+
+        private void EnsureStyles()
+        {
+            if (_codeStyle == null)
+            {
+                _codeStyle = new GUIStyle(GUI.skin.textArea)
+                {
+                    wordWrap = false,
+                    richText = false
+                };
+                _codeStyle.font = Font.CreateDynamicFontFromOSFont("Consolas", 13) ??
+                                  Font.CreateDynamicFontFromOSFont("Courier New", 13);
+                _codeStyle.fontSize = 13;
+                _codeStyle.padding = new RectOffset(6, 6, 4, 4);
+                _codeStyle.margin = new RectOffset(0, 0, 0, 0);
+            }
+
+            if (_lineNumberStyle == null)
+            {
+                _lineNumberStyle = new GUIStyle(_codeStyle)
+                {
+                    alignment = TextAnchor.UpperRight,
+                    normal = { textColor = new Color(0.45f, 0.45f, 0.45f) },
+                    active = { textColor = new Color(0.45f, 0.45f, 0.45f) },
+                    focused = { textColor = new Color(0.45f, 0.45f, 0.45f) },
+                    hover = { textColor = new Color(0.45f, 0.45f, 0.45f) }
+                };
+                _lineNumberStyle.padding = new RectOffset(0, 2, 4, 4);
+            }
+        }
+
+        private void EnsureCaretVisible(Rect codeRect, Rect viewportRect, float lineHeight, bool textChangedThisFrame)
+        {
+            if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName))
+                return;
+
+            var evt = Event.current;
+            var textEditor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
+            if (textEditor == null)
+                return;
+
+            int cursorIndex = Mathf.Clamp(textEditor.cursorIndex, 0, _code.Length);
+            int selectIndex = Mathf.Clamp(textEditor.selectIndex, 0, _code.Length);
+            bool caretMoved = cursorIndex != _lastCursorIndex || selectIndex != _lastSelectIndex;
+            bool navigationEvent = IsCaretNavigationEvent(evt);
+
+            if (caretMoved)
+                _manualScrollOverride = false;
+
+            // If user manually scrolled away, don't snap back until caret actually moves.
+            if (_manualScrollOverride && !caretMoved && !textChangedThisFrame && !navigationEvent)
+                return;
+
+            GetLineAndColumn(cursorIndex, out int line, out int column);
+
+            float caretY = codeRect.y + _codeStyle.padding.top + line * lineHeight;
+            const float margin = 10f;
+            float visibleTop = _scrollPosition.y + viewportRect.yMin;
+            float visibleBottom = _scrollPosition.y + viewportRect.yMax - 18f;
+
+            if (caretY + lineHeight + margin > visibleBottom)
+                _scrollPosition.y = caretY + lineHeight + margin - viewportRect.height;
+            else if (caretY - margin < visibleTop)
+                _scrollPosition.y = Mathf.Max(0f, caretY - margin);
+
+            _lastCursorIndex = cursorIndex;
+            _lastSelectIndex = selectIndex;
+        }
+
+        private static bool IsCaretNavigationEvent(Event evt)
+        {
+            if (evt == null || evt.type != EventType.KeyDown)
+                return false;
+
+            return evt.keyCode == KeyCode.LeftArrow ||
+                   evt.keyCode == KeyCode.RightArrow ||
+                   evt.keyCode == KeyCode.UpArrow ||
+                   evt.keyCode == KeyCode.DownArrow ||
+                   evt.keyCode == KeyCode.Home ||
+                   evt.keyCode == KeyCode.End ||
+                   evt.keyCode == KeyCode.PageUp ||
+                   evt.keyCode == KeyCode.PageDown;
+        }
+
+        private void GetLineAndColumn(int index, out int line, out int column)
+        {
+            line = 0;
+            column = 0;
+
+            for (int i = 0; i < index; i++)
+            {
+                char c = _code[i];
+                if (c == '\n')
+                {
+                    line++;
+                    column = 0;
+                }
+                else if (c != '\r')
+                {
+                    column++;
+                }
+            }
+        }
+
+        private void RebuildLineMetadata()
+        {
+            int lines = 1;
+            int currentLength = 0;
+            int maxLength = 0;
+
+            for (int i = 0; i < _code.Length; i++)
+            {
+                char c = _code[i];
+                if (c == '\n')
+                {
+                    lines++;
+                    if (currentLength > maxLength)
+                        maxLength = currentLength;
+                    currentLength = 0;
+                    continue;
+                }
+
+                if (c != '\r')
+                    currentLength++;
+            }
+
+            if (currentLength > maxLength)
+                maxLength = currentLength;
+
+            _lineCount = Mathf.Max(1, lines);
+            _maxLineLength = Mathf.Max(1, maxLength);
+
+            var sb = new StringBuilder(_lineCount * 4);
+            for (int i = 1; i <= _lineCount; i++)
             {
                 sb.Append(i);
-                if (i < lineCount)
+                if (i < _lineCount)
                     sb.Append('\n');
             }
 
-            if (_lineNumbersField != null)
-                _lineNumbersField.value = sb.ToString();
+            _lineNumbers = sb.ToString();
         }
 
-        private void SetupScrollSync()
+        private static void EditorLikeDrawRect(Rect rect, Color color)
         {
-            if (_textField == null || _lineNumbersField == null)
-                return;
-
-            _codeScrollView = _textField.Q<ScrollView>();
-            _lineScrollView = _lineNumbersField.Q<ScrollView>();
-            if (_codeScrollView == null || _lineScrollView == null)
-                return;
-
-            _codeScrollView.verticalScroller.valueChanged += OnCodeScrollChanged;
-            _lineScrollView.verticalScroller.valueChanged += OnLineScrollChanged;
-            _lineScrollView.horizontalScroller.value = 0;
-        }
-
-        private void OnCodeScrollChanged(float value)
-        {
-            if (_syncingScroll || _lineScrollView == null)
-                return;
-            _syncingScroll = true;
-            _lineScrollView.verticalScroller.value = value;
-            _syncingScroll = false;
-        }
-
-        private void OnLineScrollChanged(float value)
-        {
-            if (_syncingScroll || _codeScrollView == null)
-                return;
-            _syncingScroll = true;
-            _codeScrollView.verticalScroller.value = value;
-            _syncingScroll = false;
+            var oldColor = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            GUI.color = oldColor;
         }
     }
 }

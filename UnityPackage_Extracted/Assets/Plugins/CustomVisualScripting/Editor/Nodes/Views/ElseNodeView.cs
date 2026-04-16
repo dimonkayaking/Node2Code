@@ -12,6 +12,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private VisualElement _panelsContainer;
         private Label _collapseToggle;
         private bool _panelsExpanded = true;
+        private IVisualElementScheduledItem _syncBoundsTask;
 
         public override void Enable()
         {
@@ -19,6 +20,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             _node = nodeTarget as ElseNode;
             if (_node == null) return;
+            CleanupUi();
 
             if (controlsContainer == null)
             {
@@ -51,6 +53,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 _node.bodySubGraph,
                 false);
             _bodyPanel.OnChanged += OnSubGraphChanged;
+            _bodyPanel.OnPanelResized += OnPanelResized;
             _panelsContainer.Add(_bodyPanel);
 
             controlsContainer.Add(_panelsContainer);
@@ -68,6 +71,52 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private void OnSubGraphChanged()
         {
             _node.bodySubGraph = _bodyPanel.SubGraph;
+            RequestBoundsSync();
+        }
+
+        private void OnPanelResized(SubGraphPanel _, UnityEngine.Vector2 __)
+        {
+            RequestBoundsSync();
+        }
+
+        private void RequestBoundsSync()
+        {
+            _syncBoundsTask?.Pause();
+            _syncBoundsTask = schedule.Execute(() =>
+            {
+                var rect = GetPosition();
+                float width = UnityEngine.Mathf.Max(rect.width, layout.width, resolvedStyle.width);
+                float height = UnityEngine.Mathf.Max(rect.height, layout.height, resolvedStyle.height);
+                if (!float.IsNaN(width) && !float.IsInfinity(width) &&
+                    !float.IsNaN(height) && !float.IsInfinity(height))
+                {
+                    SetPosition(new UnityEngine.Rect(rect.x, rect.y, width, height));
+                }
+                RefreshPorts();
+                RefreshExpandedState();
+            });
+            _syncBoundsTask.ExecuteLater(0);
+        }
+
+        private void CleanupUi()
+        {
+            _syncBoundsTask?.Pause();
+            _syncBoundsTask = null;
+
+            if (_bodyPanel != null)
+            {
+                _bodyPanel.OnChanged -= OnSubGraphChanged;
+                _bodyPanel.OnPanelResized -= OnPanelResized;
+            }
+
+            if (_collapseToggle != null && _collapseToggle.parent == titleContainer)
+                titleContainer.Remove(_collapseToggle);
+
+            _panelsContainer?.RemoveFromHierarchy();
+
+            _bodyPanel = null;
+            _panelsContainer = null;
+            _collapseToggle = null;
         }
     }
 }
