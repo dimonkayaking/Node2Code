@@ -343,6 +343,64 @@ float w = Mathf.Min(x, y);";
     }
 
     [Fact]
+    public void MathfAbsQualifiedUnityEngine_ParsesWithoutErrors()
+    {
+        var code = @"
+float x = 2f;
+float y = UnityEngine.Mathf.Abs(x);";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+        Assert.Contains(result.Graph.Nodes, n => n.Type == NodeType.MathfAbs);
+    }
+
+    [Fact]
+    public void SystemMathAbsMaxMin_ParseToSameNodesAsMathf()
+    {
+        var code = @"
+float a = 1f;
+float b = 2f;
+float x = System.Math.Abs(a);
+float y = Math.Max(a, b);
+float z = Math.Min(a, b);";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+        Assert.Contains(result.Graph.Nodes, n => n.Type == NodeType.MathfAbs);
+        Assert.Contains(result.Graph.Nodes, n => n.Type == NodeType.MathfMax);
+        Assert.Contains(result.Graph.Nodes, n => n.Type == NodeType.MathfMin);
+    }
+
+    [Fact]
+    public void UnaryMinus_ParseWithoutErrors_FoldedAndSubtract()
+    {
+        var code = @"
+float a = 2f;
+float b = -a;
+float c = -3.5f;";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+        Assert.True(result.Graph.Nodes.Exists(n =>
+            n.Type == NodeType.LiteralFloat && n.Value.StartsWith('-')));
+        Assert.Contains(result.Graph.Nodes, n => n.Type == NodeType.MathSubtract);
+    }
+
+    [Fact]
+    public void MathfSqrt_and_MathPi_Passthrough_ParseWithoutErrors()
+    {
+        var code = @"
+float x = 4f;
+float r = Mathf.Sqrt(x);
+float pi = Mathf.PI;";
+        var result = _parser.Parse(code);
+        Assert.False(result.HasErrors, string.Join("\n", result.Errors));
+        Assert.True(result.Graph.Nodes.Exists(n =>
+            !string.IsNullOrEmpty(n.ExpressionOverride) &&
+            n.ExpressionOverride.Contains("Sqrt")));
+        Assert.True(result.Graph.Nodes.Exists(n =>
+            !string.IsNullOrEmpty(n.ExpressionOverride) &&
+            n.ExpressionOverride.Contains("PI")));
+    }
+
+    [Fact]
     public void VariableReassignment()
     {
         var code = "int x = 10;\nx = 20;";

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using VisualScripting.Core.Models;
 
 namespace CustomVisualScripting.Runtime.Execution
@@ -44,7 +45,10 @@ namespace CustomVisualScripting.Runtime.Execution
                     NodeType.ConsoleWriteLine => ExecuteConsoleWriteLine(node, inputs),
                     
                     NodeType.IntParse => int.TryParse(GetString(inputs, "input"), out var i) ? i : 0,
-                    NodeType.FloatParse => float.TryParse(GetString(inputs, "input"), out var f) ? f : 0f,
+                    NodeType.FloatParse => float.TryParse(GetString(inputs, "input"), NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out var f)
+                        ? f
+                        : 0f,
                     NodeType.ToStringConvert => GetObject(inputs, "input")?.ToString() ?? "",
                     
                     NodeType.MathfAbs => UnityEngine.Mathf.Abs(GetFloat(inputs, "input")),
@@ -90,7 +94,9 @@ namespace CustomVisualScripting.Runtime.Execution
                     int i => i,
                     float f => f,
                     double d => (float)d,
-                    string s => float.TryParse(s, out var f) ? f : 0f,
+                    string s => float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
+                        ? f
+                        : 0f,
                     _ => 0f
                 };
             }

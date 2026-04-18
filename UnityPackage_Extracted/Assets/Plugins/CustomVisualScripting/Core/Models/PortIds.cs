@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 
 namespace VisualScripting.Core.Models

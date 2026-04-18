@@ -1,6 +1,7 @@
-#nullable enable
+#nullable disable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
@@ -1123,8 +1124,18 @@ namespace VisualScripting.Core.Parsers
                     return notId;
                 }
 
+                case PrefixUnaryExpressionSyntax pre when pre.IsKind(SyntaxKind.UnaryPlusExpression):
+                    return VisitExpression(pre.Operand, isRoot, assignVariableToRoot, out unsupported);
+
+                case PrefixUnaryExpressionSyntax pre when pre.IsKind(SyntaxKind.UnaryMinusExpression):
+                    return VisitUnaryMinus(pre, isRoot, assignVariableToRoot, out unsupported);
+
                 case InvocationExpressionSyntax inv:
                     return VisitInvocationExpression(inv, isRoot, assignVariableToRoot, out unsupported);
+
+                case MemberAccessExpressionSyntax mathMem when
+                    IsMathfStaticReceiver(mathMem.Expression) || IsSystemMathStaticReceiver(mathMem.Expression):
+                    return CreatePassthroughMathLiteral(mathMem.ToString(), isRoot, assignVariableToRoot);
 
                 case ConditionalExpressionSyntax cond:
                     return CreateStringExpressionLiteralNode(cond.ToString().Trim(), isRoot ? assignVariableToRoot : null);
@@ -1260,6 +1271,42 @@ namespace VisualScripting.Core.Parsers
         private static bool IsLiteralNodeType(NodeType t) =>
             t is NodeType.LiteralBool or NodeType.LiteralInt or NodeType.LiteralFloat or NodeType.LiteralString;
 
+        /// <summary>
+        /// <c>Mathf.*</c> или <c>UnityEngine.Mathf.*</c> — во втором случае выражение до точки — MemberAccess с именем Mathf.
+        /// </summary>
+        private static bool IsMathfStaticReceiver(ExpressionSyntax expr)
+        {
+            switch (expr)
+            {
+                case IdentifierNameSyntax id:
+                    return string.Equals(id.Identifier.Text, "Mathf", StringComparison.Ordinal);
+                case MemberAccessExpressionSyntax m:
+                    return string.Equals(m.Name.Identifier.Text, "Mathf", StringComparison.Ordinal);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// <c>Math.*</c> или <c>System.Math.*</c> — те же ноды, что для Mathf (Abs / Max / Min).
+        /// </summary>
+        private static bool IsSystemMathStaticReceiver(ExpressionSyntax expr)
+        {
+            switch (expr)
+            {
+                case IdentifierNameSyntax id:
+                    return string.Equals(id.Identifier.Text, "Math", StringComparison.Ordinal);
+                case MemberAccessExpressionSyntax m when string.Equals(m.Name.Identifier.Text, "Math", StringComparison.Ordinal):
+                    return m.Expression is IdentifierNameSyntax sys &&
+                           string.Equals(sys.Identifier.Text, "System", StringComparison.Ordinal);
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsAbsMaxMinStaticReceiver(ExpressionSyntax expr) =>
+            IsMathfStaticReceiver(expr) || IsSystemMathStaticReceiver(expr);
+
         private string VisitInvocationExpression(
             InvocationExpressionSyntax inv,
             bool isRoot,
@@ -1285,29 +1332,160 @@ namespace VisualScripting.Core.Parsers
                     return CreateParseNode(NodeType.FloatParse, inv, isRoot, assignVariableToRoot, out unsupported);
             }
 
-            if (ma.Expression is IdentifierNameSyntax mathfId && mathfId.Identifier.Text == "Mathf")
+            NodeType? absMaxMinType = methodName switch
             {
-                NodeType? mathfType = methodName switch
-                {
-                    "Abs" => NodeType.MathfAbs,
-                    "Max" => NodeType.MathfMax,
-                    "Min" => NodeType.MathfMin,
-                    _ => null
-                };
+                "Abs" => NodeType.MathfAbs,
+                "Max" => NodeType.MathfMax,
+                "Min" => NodeType.MathfMin,
+                _ => null
+            };
 
-                if (mathfType != null)
-                    return CreateMathfNode(mathfType.Value, inv, isRoot, assignVariableToRoot, out unsupported);
-            }
+            if (absMaxMinType != null && IsAbsMaxMinStaticReceiver(ma.Expression))
+                return CreateMathfNode(absMaxMinType.Value, inv, isRoot, assignVariableToRoot, out unsupported);
 
             if (methodName == "ToString")
             {
                 return CreateToStringNode(ma.Expression, inv, isRoot, assignVariableToRoot, out unsupported);
             }
 
+            // Любые остальные Mathf.* / Math.* (Sqrt, Pow, Clamp, PI и т.д.)
+            if (IsMathfStaticReceiver(ma.Expression) || IsSystemMathStaticReceiver(ma.Expression))
+                return CreatePassthroughMathLiteral(inv.ToString(), isRoot, assignVariableToRoot);
+
             unsupported = true;
             _errors.Add(
                 $"Неподдерживаемый вызов метода ({FormatUserLocation(inv.SyntaxTree, inv.Span)}): {methodName}.");
             return null;
+        }
+
+        /// <summary>
+        /// Выражение Mathf/Math целиком в одну ноду (генератор подставляет ExpressionOverride).
+        /// </summary>
+        private string CreatePassthroughMathLiteral(string expressionText, bool isRoot, string assignVariableToRoot)
+        {
+            var id = NewId();
+            var vn = isRoot && !string.IsNullOrEmpty(assignVariableToRoot) ? assignVariableToRoot : "";
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = NodeType.LiteralFloat,
+                Value = "0",
+                ValueType = "float",
+                VariableName = vn,
+                ExpressionOverride = expressionText.Trim()
+            });
+            return id;
+        }
+
+        private string VisitUnaryMinus(
+            PrefixUnaryExpressionSyntax pre,
+            bool isRoot,
+            string assignVariableToRoot,
+            out bool unsupported)
+        {
+            unsupported = false;
+            if (pre.Operand is LiteralExpressionSyntax lit &&
+                lit.IsKind(SyntaxKind.NumericLiteralExpression))
+            {
+                var folded = CreateNegatedNumericLiteral(lit, isRoot, assignVariableToRoot);
+                if (folded != null)
+                    return folded;
+            }
+
+            var operandId = VisitExpression(pre.Operand, false, null, out unsupported);
+            if (unsupported || operandId == null)
+                return null;
+
+            var zeroId = CreateZeroLiteralMatchingOperand(operandId);
+            var subId = NewId();
+            var vn = isRoot && !string.IsNullOrEmpty(assignVariableToRoot) ? assignVariableToRoot : "";
+            var valueType = InferSubtractResultValueType(zeroId, operandId);
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = subId,
+                Type = NodeType.MathSubtract,
+                Value = "",
+                ValueType = valueType,
+                VariableName = vn
+            });
+            AddEdge(zeroId, GetDataOutPortForNodeId(zeroId), subId, "inputA");
+            AddEdge(operandId, GetDataOutPortForNodeId(operandId), subId, "inputB");
+            return subId;
+        }
+
+        private string CreateNegatedNumericLiteral(
+            LiteralExpressionSyntax lit,
+            bool isRoot,
+            string assignVariableToRoot)
+        {
+            var text = lit.Token.Text;
+            var vn = isRoot && !string.IsNullOrEmpty(assignVariableToRoot) ? assignVariableToRoot : "";
+
+            if (text.EndsWith("f", StringComparison.OrdinalIgnoreCase))
+            {
+                var core = text[..^1].Trim();
+                if (float.TryParse(core, NumberStyles.Float, CultureInfo.InvariantCulture, out var f))
+                {
+                    var id = NewId();
+                    var neg = (-f).ToString(CultureInfo.InvariantCulture);
+                    _graph.Nodes.Add(new NodeData
+                    {
+                        Id = id,
+                        Type = NodeType.LiteralFloat,
+                        Value = neg,
+                        ValueType = "float",
+                        VariableName = vn
+                    });
+                    return id;
+                }
+            }
+            else if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var li))
+            {
+                var id = NewId();
+                var negInt = unchecked(-li);
+                _graph.Nodes.Add(new NodeData
+                {
+                    Id = id,
+                    Type = NodeType.LiteralInt,
+                    Value = negInt.ToString(CultureInfo.InvariantCulture),
+                    ValueType = "int",
+                    VariableName = vn
+                });
+                return id;
+            }
+
+            return null;
+        }
+
+        private string CreateZeroLiteralMatchingOperand(string operandNodeId)
+        {
+            var n = _graph.Nodes.First(x => x.Id == operandNodeId);
+            var useFloat = n.Type == NodeType.LiteralFloat ||
+                           string.Equals(n.ValueType, "float", StringComparison.OrdinalIgnoreCase);
+            var id = NewId();
+            _graph.Nodes.Add(new NodeData
+            {
+                Id = id,
+                Type = useFloat ? NodeType.LiteralFloat : NodeType.LiteralInt,
+                Value = "0",
+                ValueType = useFloat ? "float" : "int",
+                VariableName = ""
+            });
+            return id;
+        }
+
+        private string InferSubtractResultValueType(string leftId, string rightId)
+        {
+            bool IsFloat(string id)
+            {
+                var n = _graph.Nodes.FirstOrDefault(x => x.Id == id);
+                if (n == null)
+                    return false;
+                return n.Type == NodeType.LiteralFloat ||
+                       string.Equals(n.ValueType, "float", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return IsFloat(leftId) || IsFloat(rightId) ? "float" : "int";
         }
 
         private string CreateParseNode(
@@ -1360,7 +1538,7 @@ namespace VisualScripting.Core.Parsers
                 {
                     unsupported = true;
                     _errors.Add(
-                        $"Mathf.Abs требует аргумент ({FormatUserLocation(inv.SyntaxTree, inv.Span)}).");
+                        $"Abs требует аргумент ({FormatUserLocation(inv.SyntaxTree, inv.Span)}).");
                     return null;
                 }
 
@@ -1413,7 +1591,7 @@ namespace VisualScripting.Core.Parsers
         }
 
         private string CreateToStringNode(
-            ExpressionSyntax? receiver,
+            ExpressionSyntax receiver,
             InvocationExpressionSyntax inv,
             bool isRoot,
             string assignVariableToRoot,

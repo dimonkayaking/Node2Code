@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using VisualScripting.Core.Models;
 using VisualScripting.Core.Parsers;
@@ -24,7 +25,11 @@ namespace CustomVisualScripting.Integration
             var result = _parser.Parse(code);
             NormalizePorts(result.Graph);
             if (result.HasErrors)
-                Debug.LogWarning($"[VS] Parse: ошибок={result.Errors.Count}");
+            {
+                Debug.LogWarning(
+                    $"[VS] Parse: ошибок={result.Errors.Count}\n" +
+                    string.Join("\n", result.Errors.Select((e, i) => $"  [{i + 1}] {e}")));
+            }
             else
                 Debug.Log($"[VS] Parse OK: Nodes={result.Graph.Nodes.Count}, Edges={result.Graph.Edges.Count}");
             return result;

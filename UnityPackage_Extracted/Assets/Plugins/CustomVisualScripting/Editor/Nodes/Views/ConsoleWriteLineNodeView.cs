@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Collections.Generic;
 using System.Globalization;
+using UnityEditor.UIElements;
+using UnityEngine;
 using UnityEngine.UIElements;
 using GraphProcessor;
 using CustomVisualScripting.Editor.Nodes.Base;
@@ -11,7 +13,7 @@ using VisualScripting.Core.Models;
 namespace CustomVisualScripting.Editor.Nodes.Views
 {
     [NodeCustomEditor(typeof(ConsoleWriteLineNode))]
-    public class ConsoleWriteLineNodeView : BaseNodeView
+    public class ConsoleWriteLineNodeView : CollapsibleBodyGraphNodeView
     {
         private static readonly List<string> LiteralTypes = new() { "string", "int", "float", "bool" };
 
@@ -20,6 +22,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private TextField _messageField;
         private Label _inputInfoLabel;
         private Label _validationLabel;
+
+        public override (float minW, float minH) GetLiteralBoundsMins() =>
+            IsBodyExpanded ? (260f, 108f) : (220f, 72f);
 
         public override void Enable()
         {
@@ -35,18 +40,25 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 mainContainer.Add(controlsContainer);
             }
 
-            _typeField = new PopupField<string>("Type", LiteralTypes, _node.messageValueType ?? "string");
+            controlsContainer.style.flexDirection = FlexDirection.Column;
+            controlsContainer.style.alignSelf = Align.Stretch;
+
+            var initialType = ConsoleWriteLineNode.NormalizeType(_node.messageValueType ?? "string");
+            var typeIdx = LiteralTypes.IndexOf(initialType);
+            if (typeIdx < 0)
+                typeIdx = 0;
+            _typeField = new PopupField<string>(LiteralTypes, typeIdx);
             _typeField.RegisterValueChangedCallback(evt =>
             {
                 _node.messageValueType = ConsoleWriteLineNode.NormalizeType(evt.newValue);
                 ValidateAndPersist(_messageField.value ?? "");
             });
-            controlsContainer.Add(_typeField);
+            controlsContainer.Add(LiteralRowLayout.Row("type", _typeField));
 
-            _messageField = new TextField("Value");
+            _messageField = new TextField();
             _messageField.value = _node.messageText ?? "";
             _messageField.RegisterValueChangedCallback(evt => { ValidateAndPersist(evt.newValue ?? ""); });
-            controlsContainer.Add(_messageField);
+            controlsContainer.Add(LiteralRowLayout.Row("value", _messageField));
 
             _validationLabel = new Label();
             _validationLabel.style.display = DisplayStyle.None;
@@ -57,21 +69,37 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _inputInfoLabel.style.display = DisplayStyle.None;
             controlsContainer.Add(_inputInfoLabel);
 
-            HideExecInPort();
-            schedule.Execute(HideExecInPort).ExecuteLater(100);
             schedule.Execute(RefreshUiMode).Every(200);
             RefreshUiMode();
+
+            FinishLiteralBodySetup();
+
+            schedule.Execute(HideExecInPortVisual).ExecuteLater(0);
+            schedule.Execute(HideExecInPortVisual).ExecuteLater(4);
+            schedule.Execute(HideExecInPortVisual).ExecuteLater(16);
         }
 
-        private void HideExecInPort()
+        /// <summary>
+        /// Только UI: скрываем вход потока execIn (логика графа и сериализация без изменений).
+        /// </summary>
+        private void HideExecInPortVisual()
         {
-            if (inputPortViews == null) return;
+            if (inputPortViews == null)
+                return;
 
-            foreach (var port in inputPortViews.Where(p =>
-                         string.Equals(p.fieldName, "execIn", System.StringComparison.OrdinalIgnoreCase)))
+            foreach (var pv in inputPortViews)
             {
-                port.style.display = DisplayStyle.None;
-                port.pickingMode = PickingMode.Ignore;
+                if (!PortIds.IsExecIn(pv.fieldName))
+                    continue;
+
+                pv.visible = false;
+                pv.style.display = DisplayStyle.None;
+                pv.style.height = 0;
+                pv.style.minHeight = 0;
+                pv.style.marginTop = 0;
+                pv.style.marginBottom = 0;
+                pv.style.paddingTop = 0;
+                pv.style.paddingBottom = 0;
             }
         }
 

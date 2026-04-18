@@ -26,8 +26,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         public event Action<SubGraphPanel, Vector2> OnPanelResized;
         private const float MinPanelWidth = 520f;
         private const float MinPanelHeight = 180f;
-        private const float MinNodeWidth = 420f;
-        private const float MinNodeHeight = 140f;
 
         // Nested graphs force node rect to min size; flow nodes need room for SubGraphPanel chrome
         // (MinPanelHeight per panel + title/ports) or headers/bodies overlap visually.
@@ -41,6 +39,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private readonly string _title;
         private readonly bool _isConditionPanel;
         private readonly bool _verticalResizeOnly;
+        /// <summary>Если false — только подпись секции без стрелки и без сворачивания строки заголовка.</summary>
+        private readonly bool _showHeaderCollapseToggle;
         private GraphData _subGraph;
 
         private Label _toggleLabel;
@@ -50,14 +50,23 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private IVisualElementScheduledItem _syncTicker;
         private bool _isExpanded = true;
         private bool _isSyncing;
-        private VisualElement _resizeHandle;
 
-        public SubGraphPanel(string title, GraphData subGraph, bool isConditionPanel, bool verticalResizeOnly = false)
+        /// <summary>Совпадает с вычитанием «шапки» в MakePanelResizable: контент = высота панели − это значение.</summary>
+        private const float HeaderChromePixels = 28f;
+        private float _storedFlexGrow;
+        private float _storedOuterHeight;
+        public SubGraphPanel(
+            string title,
+            GraphData subGraph,
+            bool isConditionPanel,
+            bool verticalResizeOnly = false,
+            bool showHeaderCollapseToggle = true)
         {
             _title = title;
             _subGraph = subGraph ?? new GraphData();
             _isConditionPanel = isConditionPanel;
             _verticalResizeOnly = verticalResizeOnly;
+            _showHeaderCollapseToggle = showHeaderCollapseToggle;
 
             BuildUI();
             Rebuild();
@@ -65,6 +74,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         }
 
         public GraphData SubGraph => _subGraph;
+
+        /// <summary>True, если область графа развёрнута (не только строка заголовка).</summary>
+        public bool IsGraphExpanded => _isExpanded;
 
         public void SetSubGraph(GraphData subGraph)
         {
@@ -100,12 +112,24 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             header.style.borderTopLeftRadius = 4;
             header.style.borderTopRightRadius = 4;
 
-            _toggleLabel = new Label("\u25BC");
-            _toggleLabel.style.width = 16;
-            _toggleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _toggleLabel.style.fontSize = 10;
-            _toggleLabel.style.color = new Color(0.7f, 0.7f, 0.7f);
-            header.Add(_toggleLabel);
+            if (_showHeaderCollapseToggle)
+            {
+                _toggleLabel = new Label("\u25BC");
+                _toggleLabel.style.width = 16;
+                _toggleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+                _toggleLabel.style.fontSize = 10;
+                _toggleLabel.style.color = new Color(0.7f, 0.7f, 0.7f);
+                header.Add(_toggleLabel);
+
+                header.RegisterCallback<MouseDownEvent>(e =>
+                {
+                    if (e.button == 0)
+                    {
+                        ToggleExpanded();
+                        e.StopPropagation();
+                    }
+                });
+            }
 
             var titleLabel = new Label(_title);
             titleLabel.style.flexGrow = 1;
@@ -113,15 +137,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             titleLabel.style.fontSize = 11;
             titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             header.Add(titleLabel);
-
-            header.RegisterCallback<MouseDownEvent>(e =>
-            {
-                if (e.button == 0)
-                {
-                    ToggleExpanded();
-                    e.StopPropagation();
-                }
-            });
 
             Add(header);
 
@@ -133,27 +148,66 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _content.style.overflow = Overflow.Hidden;
             Add(_content);
 
-            _resizeHandle = new VisualElement();
-            _resizeHandle.style.position = Position.Absolute;
-            _resizeHandle.style.right = 2;
-            _resizeHandle.style.bottom = 2;
-            _resizeHandle.style.width = 12;
-            _resizeHandle.style.height = 12;
-            _resizeHandle.style.backgroundColor = new Color(0.6f, 0.6f, 0.6f, 0.6f);
-            _resizeHandle.style.borderTopLeftRadius = 2;
-            _resizeHandle.style.borderTopRightRadius = 2;
-            _resizeHandle.style.borderBottomLeftRadius = 2;
-            _resizeHandle.style.borderBottomRightRadius = 2;
-            _resizeHandle.tooltip = "Потяните, чтобы изменить размер";
-            Add(_resizeHandle);
             MakePanelResizable();
         }
 
         private void ToggleExpanded()
         {
+            if (_isExpanded)
+            {
+                _storedFlexGrow = resolvedStyle.flexGrow;
+                _storedOuterHeight = resolvedStyle.height;
+            }
+
             _isExpanded = !_isExpanded;
-            _content.style.display = _isExpanded ? DisplayStyle.Flex : DisplayStyle.None;
-            _toggleLabel.text = _isExpanded ? "\u25BC" : "\u25B6";
+
+            if (_isExpanded)
+                ApplyExpandedPanelLayout();
+            else
+                ApplyCollapsedPanelLayout();
+
+            if (_toggleLabel != null)
+                _toggleLabel.text = _isExpanded ? "\u25BC" : "\u25B6";
+            OnPanelResized?.Invoke(this, new Vector2(resolvedStyle.width, resolvedStyle.height));
+        }
+
+        private void ApplyExpandedPanelLayout()
+        {
+            _content.style.display = DisplayStyle.Flex;
+            _content.style.minHeight = MinPanelHeight;
+            style.minHeight = MinPanelHeight;
+            style.flexGrow = _storedFlexGrow;
+
+            if (_storedOuterHeight > HeaderChromePixels + 2f)
+            {
+                style.height = _storedOuterHeight;
+                _content.style.height =
+                    Mathf.Max(MinPanelHeight - 10f, _storedOuterHeight - HeaderChromePixels);
+            }
+            else
+            {
+                style.height = StyleKeyword.Auto;
+                _content.style.height = StyleKeyword.Auto;
+            }
+        }
+
+        private void ApplyCollapsedPanelLayout()
+        {
+            _content.style.display = DisplayStyle.None;
+            _content.style.minHeight = 0;
+            _content.style.height = StyleKeyword.Auto;
+
+            style.flexGrow = 0;
+            style.minHeight = HeaderChromePixels;
+            style.height = HeaderChromePixels;
+        }
+
+        /// <summary>После Rebuild граф заново создан — повторно скрыть тело, если панель была свёрнута.</summary>
+        private void ApplyCollapsedVisualStateIfNeeded()
+        {
+            if (_isExpanded)
+                return;
+            ApplyCollapsedPanelLayout();
         }
 
         private void CreateGraphViewFromSubGraph()
@@ -181,7 +235,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             var ownerWindow = (EditorWindow)VisualScriptingWindow.ActiveWindow
                               ?? EditorWindow.focusedWindow
                               ?? Resources.FindObjectsOfTypeAll<VisualScriptingWindow>().FirstOrDefault();
-            _graphView = new BaseGraphView(ownerWindow);
+            _graphView = new FilteredCreateMenuBaseGraphView(ownerWindow);
             _graphView.Initialize(_internalGraph);
             _graphView.style.flexGrow = 1;
             _graphView.style.minHeight = MinPanelHeight - 10f;
@@ -204,6 +258,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 AutoLayoutIfNeeded(_graphView.nodeViews);
                 RefreshNodeViewsLayout(_graphView.nodeViews);
             }).ExecuteLater(50);
+
+            ApplyCollapsedVisualStateIfNeeded();
         }
 
         private GraphViewChange OnGraphViewChanged(GraphViewChange change)
@@ -474,6 +530,18 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             }
         }
 
+        private static void ResolveSubGraphNodeMinSizes(BaseNodeView nodeView, out float minW, out float minH)
+        {
+            var resolved = NodeViewBoundsUtils.ResolveSyncMinBounds(nodeView);
+            minW = resolved.minW;
+            minH = resolved.minH;
+            if (TryGetNestedSubGraphFlowMinDimensions(nodeView, out var nestedW, out var nestedH))
+            {
+                minW = Mathf.Max(minW, nestedW);
+                minH = Mathf.Max(minH, nestedH);
+            }
+        }
+
         private static void ConfigureNodeViewSizing(IEnumerable<BaseNodeView> nodeViews)
         {
             foreach (var nodeView in nodeViews)
@@ -481,19 +549,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 if (nodeView == null)
                     continue;
 
-                GetNestedSubGraphFlowMinDimensions(nodeView, out var minW, out var minH);
+                ResolveSubGraphNodeMinSizes(nodeView, out var minW, out var minH);
 
-                nodeView.capabilities |= Capabilities.Resizable;
-                nodeView.style.minWidth = minW;
-                nodeView.style.minHeight = minH;
+                NodeViewBoundsUtils.ApplyNodeMinStyle(nodeView, minW, minH);
+                NodeViewBoundsUtils.DisableGraphViewPortCollapse(nodeView);
+                NodeViewBoundsUtils.MakeNodeEdgesResizable(nodeView);
 
                 var rect = nodeView.GetPosition();
                 var width = Mathf.Max(rect.width, minW);
                 var height = Mathf.Max(rect.height, minH);
-
-                // Force actual width/height, not only min constraints, to prevent compressed internals.
-                nodeView.style.width = width;
-                nodeView.style.height = height;
                 nodeView.SetPosition(new Rect(
                     rect.x,
                     rect.y,
@@ -502,10 +566,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             }
         }
 
-        private static void GetNestedSubGraphFlowMinDimensions(BaseNodeView nodeView, out float minW, out float minH)
+        /// <summary>
+        /// Крупные минимумы только для flow-нод с вложенными панелями; остальные берут <see cref="NodeViewBoundsUtils.ResolveSyncMinBounds"/>.
+        /// </summary>
+        private static bool TryGetNestedSubGraphFlowMinDimensions(BaseNodeView nodeView, out float minW, out float minH)
         {
-            minW = MinNodeWidth;
-            minH = MinNodeHeight;
+            minW = 0f;
+            minH = 0f;
 
             switch (nodeView.nodeTarget)
             {
@@ -513,15 +580,17 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 case WhileNode:
                     minW = NestedFlowMinWidthIfWhile;
                     minH = NestedFlowMinHeightIfWhile;
-                    break;
+                    return true;
                 case ElseNode:
                     minW = NestedFlowMinWidthElse;
                     minH = NestedFlowMinHeightElse;
-                    break;
+                    return true;
                 case ForNode:
                     minW = NestedFlowMinWidthFor;
                     minH = NestedFlowMinHeightFor;
-                    break;
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -754,14 +823,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             foreach (var layerEntry in layers)
             {
                 var ids = layerEntry.Value;
-                float layerMaxWidth = MinNodeWidth;
+                float layerMaxWidth = NodeViewBoundsUtils.DefaultGraphNodeMinWidth;
                 float rowY = startY;
                 for (int row = 0; row < ids.Count; row++)
                 {
                     var view = nodeById[ids[row]];
                     var rect = view.GetPosition();
-                    float width = Mathf.Max(rect.width, MinNodeWidth);
-                    float height = Mathf.Max(rect.height, MinNodeHeight);
+                    ResolveSubGraphNodeMinSizes(view, out var cellMinW, out var cellMinH);
+                    float width = Mathf.Max(rect.width, cellMinW);
+                    float height = Mathf.Max(rect.height, cellMinH);
                     layerMaxWidth = Mathf.Max(layerMaxWidth, width);
                     view.SetPosition(new Rect(
                         columnX,
@@ -784,8 +854,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 if (nodeView == null)
                     continue;
 
-                nodeView.RefreshPorts();
-                nodeView.RefreshExpandedState();
+                NodeViewBoundsUtils.DisableGraphViewPortCollapse(nodeView);
+                ResolveSubGraphNodeMinSizes(nodeView, out var minW, out var minH);
+                NodeViewBoundsUtils.ApplyNodeMinStyle(nodeView, minW, minH);
+                NodeViewBoundsUtils.SyncNodeRectToLayout(nodeView, minW, minH);
             }
         }
 
@@ -811,48 +883,132 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
         private void MakePanelResizable()
         {
-            Vector2 startMouse = Vector2.zero;
-            Vector2 startSize = Vector2.zero;
-            bool resizing = false;
+            bool resizingBottom = false;
+            bool resizingRight = false;
 
-            _resizeHandle.RegisterCallback<MouseDownEvent>(evt =>
+            var bottomResizer = new VisualElement();
+            bottomResizer.style.position = Position.Absolute;
+            bottomResizer.style.bottom = -4;
+            bottomResizer.style.left = 0;
+            bottomResizer.style.right = 0;
+            bottomResizer.style.height = 8;
+            bottomResizer.pickingMode = PickingMode.Position;
+            bottomResizer.tooltip = "Потяните, чтобы изменить высоту панели";
+            bottomResizer.RegisterCallback<PointerEnterEvent>(_ =>
+                EditorUiPointerCursor.TryApply(bottomResizer, MouseCursor.ResizeVertical));
+            bottomResizer.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                if (!resizingBottom)
+                    EditorUiPointerCursor.Clear(bottomResizer);
+            });
+            Add(bottomResizer);
+
+            var rightResizer = new VisualElement();
+            rightResizer.style.position = Position.Absolute;
+            rightResizer.style.right = -4;
+            rightResizer.style.top = 0;
+            rightResizer.style.bottom = 0;
+            rightResizer.style.width = 8;
+            rightResizer.pickingMode = PickingMode.Position;
+            rightResizer.tooltip = "Потяните, чтобы изменить ширину панели";
+            rightResizer.RegisterCallback<PointerEnterEvent>(_ =>
+                EditorUiPointerCursor.TryApply(rightResizer, MouseCursor.ResizeHorizontal));
+            rightResizer.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                if (!resizingRight)
+                    EditorUiPointerCursor.Clear(rightResizer);
+            });
+            if (!_verticalResizeOnly)
+                Add(rightResizer);
+
+            var bottomDrag = new PointerRootDragSession(
+                delta =>
+                {
+                    if (!resizingBottom)
+                        return;
+                    float rh = resolvedStyle.minHeight.value;
+                    float minH = rh > 2f ? rh : MinPanelHeight;
+                    float height = Mathf.Max(minH, resolvedStyle.height + delta.y);
+                    style.height = height;
+                    _content.style.height = height - 28f;
+                    OnPanelResized?.Invoke(this, new Vector2(resolvedStyle.width, height));
+                },
+                () =>
+                {
+                    resizingBottom = false;
+                    EditorUiPointerCursor.Clear(bottomResizer);
+                });
+
+            var rightDrag = new PointerRootDragSession(
+                delta =>
+                {
+                    if (!resizingRight)
+                        return;
+                    float rw = resolvedStyle.minWidth.value;
+                    float minW = rw > 2f ? rw : MinPanelWidth;
+                    float width = Mathf.Max(minW, resolvedStyle.width + delta.x);
+                    style.width = width;
+                    OnPanelResized?.Invoke(this, new Vector2(width, resolvedStyle.height));
+                },
+                () =>
+                {
+                    resizingRight = false;
+                    EditorUiPointerCursor.Clear(rightResizer);
+                });
+
+            bottomResizer.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (evt.button != 0)
                     return;
-                resizing = true;
-                startMouse = evt.mousePosition;
-                startSize = new Vector2(resolvedStyle.width, resolvedStyle.height);
-                _resizeHandle.CaptureMouse();
-                evt.StopPropagation();
-            });
-
-            _resizeHandle.RegisterCallback<MouseMoveEvent>(evt =>
-            {
-                if (!resizing)
-                    return;
-
-                var delta = evt.mousePosition - startMouse;
-                float height = Mathf.Max(MinPanelHeight, startSize.y + delta.y);
-                if (!_verticalResizeOnly)
+                resizingBottom = true;
+                if (!bottomDrag.TryBeginFromPointer(bottomResizer, evt))
                 {
-                    float width = Mathf.Max(MinPanelWidth, startSize.x + delta.x);
-                    style.width = width;
-                }
-                style.height = height;
-                _content.style.height = height - 28f;
-                OnPanelResized?.Invoke(this, new Vector2(resolvedStyle.width, height));
-                evt.StopPropagation();
-            });
-
-            _resizeHandle.RegisterCallback<MouseUpEvent>(evt =>
-            {
-                if (!resizing)
+                    resizingBottom = false;
                     return;
+                }
 
-                resizing = false;
-                _resizeHandle.ReleaseMouse();
                 evt.StopPropagation();
-            });
+            }, TrickleDown.TrickleDown);
+
+            bottomResizer.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                    return;
+                if (!bottomDrag.TryBeginFromMouse(bottomResizer, evt))
+                    return;
+                resizingBottom = true;
+                evt.StopPropagation();
+                evt.StopImmediatePropagation();
+            }, TrickleDown.TrickleDown);
+
+            bottomResizer.RegisterCallback<DetachFromPanelEvent>(_ => bottomDrag.Teardown());
+
+            rightResizer.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                    return;
+                resizingRight = true;
+                if (!rightDrag.TryBeginFromPointer(rightResizer, evt))
+                {
+                    resizingRight = false;
+                    return;
+                }
+
+                evt.StopPropagation();
+            }, TrickleDown.TrickleDown);
+
+            rightResizer.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.button != 0)
+                    return;
+                if (!rightDrag.TryBeginFromMouse(rightResizer, evt))
+                    return;
+                resizingRight = true;
+                evt.StopPropagation();
+                evt.StopImmediatePropagation();
+            }, TrickleDown.TrickleDown);
+
+            rightResizer.RegisterCallback<DetachFromPanelEvent>(_ => rightDrag.Teardown());
         }
     }
 }

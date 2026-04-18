@@ -27,6 +27,8 @@ namespace CustomVisualScripting.Runtime.Execution
                 SendLog($"[GraphRunner] Запуск графа: {graph.Nodes.Count} нод, {graph.Edges.Count} связей",
                     LogType.Log);
 
+                Clear();
+
                 var hasIncomingExec = new HashSet<string>();
                 foreach (var edge in graph.Edges)
                 {
@@ -38,9 +40,12 @@ namespace CustomVisualScripting.Runtime.Execution
                     .Where(n => !hasIncomingExec.Contains(n.Id) && IsFlowNode(n.Type))
                     .ToList();
 
+                // Сначала вычисляем литералы / math / conversion, чтобы потоковые ноды брали входы из _context.
+                ExecuteDataOnly(graph);
+
                 if (startNodes.Count == 0)
                 {
-                    ExecuteDataOnly(graph);
+                    SendLog("[GraphRunner] Выполнение завершено", LogType.Log);
                     return;
                 }
 

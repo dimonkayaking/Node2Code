@@ -5,7 +5,7 @@ using CustomVisualScripting.Editor.Nodes.Flow;
 namespace CustomVisualScripting.Editor.Nodes.Views
 {
     [NodeCustomEditor(typeof(ElseNode))]
-    public class ElseNodeView : BaseNodeView
+    public class ElseNodeView : BaseNodeView, IFlowSubGraphNodeMinBounds
     {
         private ElseNode _node;
         private SubGraphPanel _bodyPanel;
@@ -59,6 +59,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             controlsContainer.Add(_panelsContainer);
 
             title = "Else";
+
+            NodeViewBoundsUtils.DisableGraphViewPortCollapse(this);
+            RequestBoundsSync();
         }
 
         private void TogglePanels()
@@ -66,6 +69,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _panelsExpanded = !_panelsExpanded;
             _panelsContainer.style.display = _panelsExpanded ? DisplayStyle.Flex : DisplayStyle.None;
             _collapseToggle.text = _panelsExpanded ? "\u25BC" : "\u25B6";
+            NodeViewBoundsUtils.SetFlowControlsMinHeightForCollapse(controlsContainer, _panelsExpanded);
+            RequestBoundsSync();
         }
 
         private void OnSubGraphChanged()
@@ -79,23 +84,19 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             RequestBoundsSync();
         }
 
+        public (float minW, float minH) GetResolvedMinBounds() =>
+            _panelsExpanded
+                ? (NodeViewBoundsUtils.FlowElseMinWidth, NodeViewBoundsUtils.FlowElseMinHeight)
+                : (NodeViewBoundsUtils.FlowElseCollapsedMinWidth, NodeViewBoundsUtils.FlowElseCollapsedMinHeight);
+
         private void RequestBoundsSync()
         {
             _syncBoundsTask?.Pause();
             _syncBoundsTask = schedule.Execute(() =>
             {
-                var rect = GetPosition();
-                float width = UnityEngine.Mathf.Max(rect.width, layout.width, resolvedStyle.width);
-                float height = UnityEngine.Mathf.Max(rect.height, layout.height, resolvedStyle.height);
-                if (!float.IsNaN(width) && !float.IsInfinity(width) &&
-                    !float.IsNaN(height) && !float.IsInfinity(height))
-                {
-                    SetPosition(new UnityEngine.Rect(rect.x, rect.y, width, height));
-                }
-                RefreshPorts();
-                RefreshExpandedState();
+                NodeViewBoundsUtils.RunFlowBoundsSyncTwice(this, GetResolvedMinBounds, () => !_panelsExpanded);
             });
-            _syncBoundsTask.ExecuteLater(0);
+            _syncBoundsTask.ExecuteLater(10);
         }
 
         private void CleanupUi()

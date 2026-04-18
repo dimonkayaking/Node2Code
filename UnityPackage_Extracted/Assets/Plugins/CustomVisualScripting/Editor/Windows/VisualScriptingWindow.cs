@@ -20,6 +20,7 @@ using CustomVisualScripting.Editor.Nodes.Debug;
 using CustomVisualScripting.Editor.Nodes.Logic;
 using CustomVisualScripting.Editor.Nodes.Conversion;
 using CustomVisualScripting.Editor.Nodes.Unity;
+using CustomVisualScripting.Editor.Nodes.Views;
 using CustomVisualScripting.Runtime.Execution;
 using VisualScripting.Core.Models;
 using CustomToolbar = CustomVisualScripting.Windows.Views.ToolbarView;
@@ -36,7 +37,6 @@ namespace CustomVisualScripting.Editor.Windows
         private const float AutoLayoutColumnGap = 60f;
         private const float AutoLayoutRowGap = 40f;
         private const float OverlapResolveMargin = 24f;
-        private const float BoundsSyncEpsilon = 0.5f;
 
         private CompleteGraphData _currentGraph;
         private BaseGraph _internalGraph;
@@ -554,7 +554,7 @@ namespace CustomVisualScripting.Editor.Windows
                     }
                 }
                 
-                _graphView = new BaseGraphView(this);
+                _graphView = new FilteredCreateMenuBaseGraphView(this);
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 _graphView.graphViewChanged += OnGraphViewChanged;
@@ -802,14 +802,16 @@ namespace CustomVisualScripting.Editor.Windows
                 if (nodeView == null)
                     continue;
 
-                nodeView.capabilities |= Capabilities.Resizable;
-                nodeView.style.minWidth = MinNodeWidth;
-                nodeView.style.minHeight = MinNodeHeight;
+                var mins = NodeViewBoundsUtils.ResolveSyncMinBounds(nodeView);
+                NodeViewBoundsUtils.ApplyNodeMinStyle(nodeView, mins.minW, mins.minH);
+                NodeViewBoundsUtils.DisableGraphViewPortCollapse(nodeView);
+                NodeViewBoundsUtils.MakeNodeEdgesResizable(nodeView);
 
                 var rect = nodeView.GetPosition();
-                var width = Mathf.Max(rect.width, MinNodeWidth);
-                var height = Mathf.Max(rect.height, MinNodeHeight);
+                var width = Mathf.Max(rect.width, mins.minW);
+                var height = Mathf.Max(rect.height, mins.minH);
                 nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
+
                 nodeView.UnregisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
                 nodeView.RegisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
             }
@@ -1146,24 +1148,7 @@ namespace CustomVisualScripting.Editor.Windows
             if (nodeView == null)
                 return;
 
-            var rect = nodeView.GetPosition();
-            float resolvedWidth = nodeView.resolvedStyle.width;
-            float resolvedHeight = nodeView.resolvedStyle.height;
-            float layoutWidth = nodeView.layout.width;
-            float layoutHeight = nodeView.layout.height;
-            float width = Mathf.Max(rect.width, MinNodeWidth, resolvedWidth, layoutWidth);
-            float height = Mathf.Max(rect.height, MinNodeHeight, resolvedHeight, layoutHeight);
-            if (float.IsNaN(width) || float.IsInfinity(width) ||
-                float.IsNaN(height) || float.IsInfinity(height))
-                return;
-
-            if (Mathf.Abs(width - rect.width) <= BoundsSyncEpsilon &&
-                Mathf.Abs(height - rect.height) <= BoundsSyncEpsilon)
-                return;
-
-            nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
-            nodeView.RefreshPorts();
-            nodeView.RefreshExpandedState();
+            NodeViewBoundsUtils.PerformFullNodeAppearanceFix(nodeView);
         }
 
         private static bool HasHeavyOverlap(IReadOnlyList<BaseNodeView> nodeViews)
