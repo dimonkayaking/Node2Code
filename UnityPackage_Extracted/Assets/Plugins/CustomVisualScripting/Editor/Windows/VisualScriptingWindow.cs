@@ -40,7 +40,7 @@ namespace CustomVisualScripting.Editor.Windows
 
         private CompleteGraphData _currentGraph;
         private BaseGraph _internalGraph;
-        private BaseGraphView _graphView;
+        private FilteredCreateMenuBaseGraphView _graphView;
         private VisualElement _graphContainer;
         
         private CodeEditorView _codeEditor;
@@ -92,14 +92,56 @@ namespace CustomVisualScripting.Editor.Windows
 
         private void OnCSharpRunnerOutput(string message, LogType type)
         {
+            var cleaned = message;
+            var unityRelayType = type;
+            var shouldRelayToUnity = false;
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                if (message.StartsWith(CSharpProcessRunner.UnityDebugLogErrorMarker, StringComparison.Ordinal))
+                {
+                    cleaned = message.Substring(CSharpProcessRunner.UnityDebugLogErrorMarker.Length);
+                    unityRelayType = LogType.Error;
+                    shouldRelayToUnity = true;
+                }
+                else if (message.StartsWith(CSharpProcessRunner.UnityDebugLogWarningMarker, StringComparison.Ordinal))
+                {
+                    cleaned = message.Substring(CSharpProcessRunner.UnityDebugLogWarningMarker.Length);
+                    unityRelayType = LogType.Warning;
+                    shouldRelayToUnity = true;
+                }
+                else if (message.StartsWith(CSharpProcessRunner.UnityDebugLogMarker, StringComparison.Ordinal))
+                {
+                    cleaned = message.Substring(CSharpProcessRunner.UnityDebugLogMarker.Length);
+                    unityRelayType = LogType.Log;
+                    shouldRelayToUnity = true;
+                }
+            }
+
+            if (shouldRelayToUnity)
+            {
+                switch (unityRelayType)
+                {
+                    case LogType.Error:
+                        UnityEngine.Debug.LogError(cleaned);
+                        break;
+                    case LogType.Warning:
+                        UnityEngine.Debug.LogWarning(cleaned);
+                        break;
+                    default:
+                        UnityEngine.Debug.Log(cleaned);
+                        break;
+                }
+            }
+
             EditorApplication.delayCall += () =>
             {
                 if (_consoleView != null)
                 {
-                    _consoleView.AddMessage(message, type);
+                    _consoleView.AddMessage(cleaned, unityRelayType);
                 }
 
-                if (_toolbar != null && type == LogType.Error)
+                if (_toolbar != null && type == LogType.Error && !shouldRelayToUnity)
                 {
                     _toolbar.SetStatusError("Ошибка выполнения C#");
                 }
@@ -119,6 +161,7 @@ namespace CustomVisualScripting.Editor.Windows
             if (_graphView != null)
             {
                 _graphView.graphViewChanged -= OnGraphViewChanged;
+                _graphView.NodeViewAdded -= OnNodeViewAdded;
                 _graphView.Dispose();
                 _graphView = null;
             }
@@ -555,6 +598,7 @@ namespace CustomVisualScripting.Editor.Windows
                 }
                 
                 _graphView = new FilteredCreateMenuBaseGraphView(this);
+                _graphView.NodeViewAdded += OnNodeViewAdded;
                 _graphView.Initialize(_internalGraph);
                 _graphView.style.flexGrow = 1;
                 _graphView.graphViewChanged += OnGraphViewChanged;
@@ -808,9 +852,10 @@ namespace CustomVisualScripting.Editor.Windows
                 NodeViewBoundsUtils.MakeNodeEdgesResizable(nodeView);
 
                 var rect = nodeView.GetPosition();
+                var xy = NodeViewBoundsUtils.GetAuthoritativeNodeTopLeft(nodeView);
                 var width = Mathf.Max(rect.width, mins.minW);
                 var height = Mathf.Max(rect.height, mins.minH);
-                nodeView.SetPosition(new Rect(rect.x, rect.y, width, height));
+                nodeView.SetPosition(new Rect(xy.x, xy.y, width, height));
 
                 nodeView.UnregisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
                 nodeView.RegisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
@@ -822,6 +867,28 @@ namespace CustomVisualScripting.Editor.Windows
             if (_graphView?.nodeViews != null)
                 ConfigureNodeViewSizing(_graphView.nodeViews);
             return change;
+        }
+
+        /// <summary>
+        /// Срабатывает для каждой новой ноды сразу при её добавлении в граф — в том числе для созданных из меню,
+        /// где <see cref="GraphView.graphViewChanged"/> не вызывается.
+        /// </summary>
+        private void OnNodeViewAdded(BaseNodeView nodeView)
+        {
+            if (nodeView == null)
+                return;
+
+            ConfigureNodeViewSizing(new[] { nodeView });
+
+            // Дополнительный отложенный прогон: при создании из меню layout ещё не посчитан,
+            // размер и позиция подтянутся после первого measure-прохода.
+            nodeView.schedule.Execute(() =>
+            {
+                if (nodeView.panel == null)
+                    return;
+                ConfigureNodeViewSizing(new[] { nodeView });
+                SyncNodeBoundsToLayout(nodeView);
+            }).ExecuteLater(1);
         }
 
         private void AutoLayoutIfNeeded()

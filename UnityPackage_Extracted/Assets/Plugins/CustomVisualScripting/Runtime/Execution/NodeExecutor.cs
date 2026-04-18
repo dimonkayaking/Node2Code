@@ -43,6 +43,7 @@ namespace CustomVisualScripting.Runtime.Execution
                     NodeType.FlowFor => true,
                     NodeType.FlowWhile => GetBool(inputs, "condition"),
                     NodeType.ConsoleWriteLine => ExecuteConsoleWriteLine(node, inputs),
+                    NodeType.DebugLog => ExecuteDebugLog(node, inputs),
                     
                     NodeType.IntParse => int.TryParse(GetString(inputs, "input"), out var i) ? i : 0,
                     NodeType.FloatParse => float.TryParse(GetString(inputs, "input"), NumberStyles.Float,
@@ -74,6 +75,14 @@ namespace CustomVisualScripting.Runtime.Execution
             var msg = GetObject(inputs, "message")?.ToString();
             if (string.IsNullOrEmpty(msg)) msg = node.Value ?? "";
             UnityEngine.Debug.Log($"[Console] {msg}");
+            return null;
+        }
+
+        private object ExecuteDebugLog(NodeData node, Dictionary<string, object> inputs)
+        {
+            var msg = GetObject(inputs, "message")?.ToString();
+            if (string.IsNullOrEmpty(msg)) msg = node.Value ?? "";
+            UnityEngine.Debug.Log(msg);
             return null;
         }
         

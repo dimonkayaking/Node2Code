@@ -12,11 +12,23 @@ namespace CustomVisualScripting.Editor.Nodes.Views
     {
         bool _pendingPostGraphChromeFix;
 
+        /// <summary>
+        /// <para>
+        /// Срабатывает для каждой новой <see cref="BaseNodeView"/>, добавленной в граф.
+        /// </para>
+        /// <para>
+        /// Unity <c>GraphView.AddElement</c> не виртуальный, а <c>GraphView.graphViewChanged</c> не вызывается
+        /// при программном <c>AddElement</c> (именно так GraphProcessor добавляет ноду из меню/загрузки).
+        /// Поэтому отслеживаем рост <see cref="BaseGraphView.nodeViews"/> планировщиком каждый кадр.
+        /// </para>
+        /// </summary>
+        public event Action<BaseNodeView> NodeViewAdded;
+
+        readonly HashSet<BaseNodeView> _trackedNodeViews = new();
+
         public FilteredCreateMenuBaseGraphView(EditorWindow window)
             : base(window)
         {
-            // GraphProcessor после Initialize вызывает RefreshPorts() → Unity снова создаёт collapse-button.
-            // Оборачиваем колбэк GraphProcessor и после каждого изменения графа подтягиваем вид нод на следующий кадр.
             var previousGraphViewChanged = graphViewChanged;
             graphViewChanged = change =>
             {
@@ -24,6 +36,34 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 SchedulePostGraphChromeFixForAllNodes();
                 return change;
             };
+
+            schedule.Execute(PollForNewNodeViews).Every(16);
+        }
+
+        void PollForNewNodeViews()
+        {
+            if (nodeViews == null || nodeViews.Count == 0)
+                return;
+
+            for (int i = 0; i < nodeViews.Count; i++)
+            {
+                var nv = nodeViews[i];
+                if (nv == null)
+                    continue;
+                if (!_trackedNodeViews.Add(nv))
+                    continue;
+
+                NodeViewBoundsUtils.PerformFullNodeAppearanceFix(nv);
+                NodeViewAdded?.Invoke(nv);
+
+                var captured = nv;
+                captured.schedule.Execute(() =>
+                    NodeViewBoundsUtils.PerformFullNodeAppearanceFix(captured)).ExecuteLater(0);
+                captured.schedule.Execute(() =>
+                    NodeViewBoundsUtils.PerformFullNodeAppearanceFix(captured)).ExecuteLater(2);
+            }
+
+            _trackedNodeViews.RemoveWhere(nv => nv == null || nv.panel == null);
         }
 
         void SchedulePostGraphChromeFixForAllNodes()

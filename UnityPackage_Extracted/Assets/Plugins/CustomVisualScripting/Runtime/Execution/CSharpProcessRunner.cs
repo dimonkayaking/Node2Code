@@ -147,8 +147,32 @@ internal static class Program
             Console.Error.WriteLine(ex.StackTrace);
         }}
     }}
+}}
+
+// Шим UnityEngine.Debug для автономного C# runner'а: нода Debug.Log генерирует
+// вызов Debug.Log(...), и чтобы этот код собирался вне Unity — даём локальный тип.
+// Сообщения помечаются маркерами, чтобы редактор Unity перехватил их и сдублировал
+// в Unity-консоль через UnityEngine.Debug.Log/LogWarning/LogError.
+internal static class Debug
+{{
+    private const string LogMarker = ""{UnityDebugLogMarker}"";
+    private const string WarningMarker = ""{UnityDebugLogWarningMarker}"";
+    private const string ErrorMarker = ""{UnityDebugLogErrorMarker}"";
+
+    public static void Log(object message) => Console.WriteLine($""{{LogMarker}}{{message}}"");
+    public static void LogWarning(object message) => Console.WriteLine($""{{WarningMarker}}{{message}}"");
+    public static void LogError(object message) => Console.Error.WriteLine($""{{ErrorMarker}}{{message}}"");
 }}";
         }
+
+        /// <summary>Маркер начала строки stdout, помечающий вызов Debug.Log в сгенерированном коде.</summary>
+        public const string UnityDebugLogMarker = "__VS_UNITY_DEBUG_LOG__::";
+
+        /// <summary>Маркер Debug.LogWarning.</summary>
+        public const string UnityDebugLogWarningMarker = "__VS_UNITY_DEBUG_WARNING__::";
+
+        /// <summary>Маркер Debug.LogError.</summary>
+        public const string UnityDebugLogErrorMarker = "__VS_UNITY_DEBUG_ERROR__::";
 
         private static string Indent(string text, int indentLevel)
         {

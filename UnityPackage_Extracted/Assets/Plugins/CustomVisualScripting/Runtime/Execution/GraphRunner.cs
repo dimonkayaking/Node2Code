@@ -265,6 +265,7 @@ namespace CustomVisualScripting.Runtime.Execution
                 NodeType.FlowFor => "body",
                 NodeType.FlowWhile => "body",
                 NodeType.ConsoleWriteLine => "execOut",
+                NodeType.DebugLog => "execOut",
                 _ => "execOut"
             };
         }
@@ -272,7 +273,7 @@ namespace CustomVisualScripting.Runtime.Execution
         private bool IsFlowNode(NodeType type)
         {
             return type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor
-                or NodeType.FlowWhile or NodeType.ConsoleWriteLine;
+                or NodeType.FlowWhile or NodeType.ConsoleWriteLine or NodeType.DebugLog;
         }
 
         private void ExecuteDataOnly(GraphData graph)

@@ -556,13 +556,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 NodeViewBoundsUtils.MakeNodeEdgesResizable(nodeView);
 
                 var rect = nodeView.GetPosition();
+                var xy = NodeViewBoundsUtils.GetAuthoritativeNodeTopLeft(nodeView);
                 var width = Mathf.Max(rect.width, minW);
                 var height = Mathf.Max(rect.height, minH);
-                nodeView.SetPosition(new Rect(
-                    rect.x,
-                    rect.y,
-                    width,
-                    height));
+                nodeView.SetPosition(new Rect(xy.x, xy.y, width, height));
             }
         }
 

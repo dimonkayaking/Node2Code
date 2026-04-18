@@ -156,7 +156,7 @@ namespace VisualScripting.Core.Parsers
                 return false;
 
             return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor
-                or NodeType.FlowWhile or NodeType.ConsoleWriteLine;
+                or NodeType.FlowWhile or NodeType.ConsoleWriteLine or NodeType.DebugLog;
         }
 
         private sealed class FlowHost
@@ -297,6 +297,9 @@ namespace VisualScripting.Core.Parsers
             if (expr is InvocationExpressionSyntax inv && IsConsoleWriteLine(inv))
                 return VisitConsoleWriteLine(inv, prevNode, prevPort);
 
+            if (expr is InvocationExpressionSyntax invDebug && IsDebugLog(invDebug))
+                return VisitDebugLog(invDebug, prevNode, prevPort);
+
             if (expr is AssignmentExpressionSyntax assign && assign.Left is IdentifierNameSyntax)
             {
                 if (assign.Kind() == SyntaxKind.SimpleAssignmentExpression)
@@ -377,13 +380,40 @@ namespace VisualScripting.Core.Parsers
             return ma.Expression is IdentifierNameSyntax id && id.Identifier.Text == "Console";
         }
 
+        private static bool IsDebugLog(InvocationExpressionSyntax inv)
+        {
+            if (inv.Expression is not MemberAccessExpressionSyntax ma)
+                return false;
+            if (ma.Name.Identifier.Text != "Log")
+                return false;
+
+            // Debug.Log(...) — и UnityEngine.Debug.Log(...) через квалифицированное имя.
+            return ma.Expression switch
+            {
+                IdentifierNameSyntax id => id.Identifier.Text == "Debug",
+                MemberAccessExpressionSyntax nested => nested.Name.Identifier.Text == "Debug",
+                _ => false
+            };
+        }
+
+        private FlowHost VisitDebugLog(InvocationExpressionSyntax inv, string prevNode, string prevPort)
+        {
+            return VisitMessagePrintInvocation(inv, prevNode, prevPort, NodeType.DebugLog);
+        }
+
         private FlowHost VisitConsoleWriteLine(InvocationExpressionSyntax inv, string prevNode, string prevPort)
+        {
+            return VisitMessagePrintInvocation(inv, prevNode, prevPort, NodeType.ConsoleWriteLine);
+        }
+
+        private FlowHost VisitMessagePrintInvocation(
+            InvocationExpressionSyntax inv, string prevNode, string prevPort, NodeType nodeType)
         {
             var nodeId = NewId();
             var nodeData = new NodeData
             {
                 Id = nodeId,
-                Type = NodeType.ConsoleWriteLine,
+                Type = nodeType,
                 Value = "",
                 ValueType = "string",
                 VariableName = ""
@@ -1752,7 +1782,7 @@ namespace VisualScripting.Core.Parsers
                 return false;
 
             return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
-                or NodeType.ConsoleWriteLine;
+                or NodeType.ConsoleWriteLine or NodeType.DebugLog;
         }
 
         private bool SupportsExecIn(string nodeId)
@@ -1762,7 +1792,7 @@ namespace VisualScripting.Core.Parsers
                 return false;
 
             return node.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
-                or NodeType.ConsoleWriteLine;
+                or NodeType.ConsoleWriteLine or NodeType.DebugLog;
         }
 
         private string NewId() => $"node_{_nodeCounter++}";

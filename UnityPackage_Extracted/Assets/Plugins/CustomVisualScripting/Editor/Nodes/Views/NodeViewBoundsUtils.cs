@@ -63,15 +63,57 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         static readonly ConditionalWeakTable<BaseNodeView, object> s_chromeRepairInstalled = new();
 
         /// <summary>
-        /// Единый проход: убрать collapse UI GraphView, подправить отступы/разделитель, синхронизировать rect с layout.
-        /// Нужен после <c>RefreshPorts()</c> GraphProcessor — Unity снова вставляет <c>collapse-button</c>.
+        /// Категория Flow: оставляем стандартное сворачивание ноды GraphView (плашки портов).
+        /// Все остальные (math, logic, conversion, Mathf, Unity, Debug, литералы): сворачивание GraphView отключаем;
+        /// у литералов сворачивается только тело через <see cref="CollapsibleBodyGraphNodeView"/>.
         /// </summary>
+        public static bool IsFlowCategoryNodeType(NodeType t) =>
+            t is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
+                or NodeType.ConsoleWriteLine or NodeType.DebugLog;
+
         /// <summary>
-        /// Только убрать стрелку/кнопку сворачивания портов (после <c>RefreshPorts</c> Unity снова их создаёт).
+        /// Нужно ли убрать стандартный collapse GraphView (стрелка у заголовка). Для Flow — не убираем.
+        /// </summary>
+        public static bool ShouldStripUnityPortCollapseChrome(BaseNodeView nodeView)
+        {
+            if (nodeView?.nodeTarget is not CustomBaseNode cn)
+                return true;
+            return !IsFlowCategoryNodeType(cn.NodeType);
+        }
+
+        /// <summary>
+        /// Левый верх ноды в координатах содержимого графа. У «тяжёлых» NodeView до первого прохода layout
+        /// <see cref="GraphElement.GetPosition"/> часто даёт (0,0), хотя в модели узла уже записана точка создания из меню.
+        /// </summary>
+        public static Vector2 GetAuthoritativeNodeTopLeft(BaseNodeView nodeView)
+        {
+            if (nodeView?.nodeTarget == null)
+                return Vector2.zero;
+
+            var viewRect = nodeView.GetPosition();
+            var modelRect = nodeView.nodeTarget.position;
+
+            const float eps = 0.5f;
+            bool viewOriginWrong =
+                Mathf.Abs(viewRect.x) < eps &&
+                Mathf.Abs(viewRect.y) < eps;
+
+            bool modelHasCorner =
+                Mathf.Abs(modelRect.x) >= eps ||
+                Mathf.Abs(modelRect.y) >= eps;
+
+            if (viewOriginWrong && modelHasCorner)
+                return new Vector2(modelRect.xMin, modelRect.yMin);
+
+            return new Vector2(viewRect.x, viewRect.y);
+        }
+
+        /// <summary>
+        /// Только убрать стрелку сворачивания портов после <c>RefreshPorts</c> (не для Flow).
         /// </summary>
         public static void StripCollapseChromeAfterPossibleRefreshPorts(BaseNodeView nodeView)
         {
-            if (nodeView == null)
+            if (nodeView == null || !ShouldStripUnityPortCollapseChrome(nodeView))
                 return;
 
             nodeView.capabilities &= ~Capabilities.Collapsible;
@@ -80,16 +122,22 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             HideTitleButtonContainerChrome(nodeView);
         }
 
+        /// <summary>
+        /// Единый проход: при необходимости убрать collapse UI GraphView, подправить отступы/разделитель, синхронизировать rect с layout.
+        /// После <c>RefreshPorts()</c> Unity снова вставляет <c>collapse-button</c> у не-Flow нод.
+        /// </summary>
         public static void PerformFullNodeAppearanceFix(BaseNodeView nodeView)
         {
             if (nodeView == null)
                 return;
 
-            nodeView.capabilities &= ~Capabilities.Collapsible;
-            nodeView.expanded = true;
-
-            RemoveUnityGraphViewCollapseChrome(nodeView);
-            HideTitleButtonContainerChrome(nodeView);
+            if (ShouldStripUnityPortCollapseChrome(nodeView))
+            {
+                nodeView.capabilities &= ~Capabilities.Collapsible;
+                nodeView.expanded = true;
+                RemoveUnityGraphViewCollapseChrome(nodeView);
+                HideTitleButtonContainerChrome(nodeView);
+            }
 
             StripGraphNodeBottomPadding(nodeView);
             EnsurePortSectionBottomDivider(nodeView);
@@ -415,6 +463,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 return;
 
             var rect = nodeView.GetPosition();
+            var xy = GetAuthoritativeNodeTopLeft(nodeView);
             float lh = nodeView.layout.height;
             float lw = nodeView.layout.width;
             if (lh < 2f)
@@ -423,10 +472,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             float nh = Mathf.Max(minH, lh);
             float nw = Mathf.Max(minW, lw >= 2f ? lw : rect.width);
 
-            if (nh >= rect.height - 0.75f && nw >= rect.width - 0.75f)
+            bool sizeUnchanged = nh >= rect.height - 0.75f && nw >= rect.width - 0.75f;
+            bool posUnchanged =
+                Mathf.Abs(xy.x - rect.x) < 0.5f &&
+                Mathf.Abs(xy.y - rect.y) < 0.5f;
+
+            if (sizeUnchanged && posUnchanged)
                 return;
 
-            nodeView.SetPosition(new Rect(rect.x, rect.y, nw, nh));
+            nodeView.SetPosition(new Rect(xy.x, xy.y, nw, nh));
             nodeView.RefreshPorts();
         }
 
@@ -437,8 +491,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 or NodeType.CompareNotEqual or NodeType.CompareGreaterOrEqual or NodeType.CompareLessOrEqual
                 or NodeType.LogicalAnd or NodeType.LogicalOr or NodeType.LogicalNot
                 or NodeType.IntParse or NodeType.FloatParse or NodeType.ToStringConvert
-                or NodeType.MathfAbs or NodeType.MathfMax or NodeType.MathfMin
-                or NodeType.DebugLog;
+                or NodeType.MathfAbs or NodeType.MathfMax or NodeType.MathfMin;
 
         public static (float minW, float minH) ResolveSyncMinBounds(BaseNodeView nodeView)
         {
@@ -482,8 +535,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (nodeView == null)
                 return;
 
-            var rect = nodeView.GetPosition();
-            nodeView.SetPosition(new Rect(rect.x, rect.y, w, h));
+            var xy = GetAuthoritativeNodeTopLeft(nodeView);
+            nodeView.SetPosition(new Rect(xy.x, xy.y, w, h));
             nodeView.RefreshPorts();
         }
 
@@ -557,11 +610,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             float w = Mathf.Max(minW, contentW);
             float h = Mathf.Max(minH, contentH);
 
-            var rect = nodeView.GetPosition();
+            var xy = GetAuthoritativeNodeTopLeft(nodeView);
             if (float.IsNaN(w) || float.IsInfinity(w) || float.IsNaN(h) || float.IsInfinity(h))
                 return;
 
-            nodeView.SetPosition(new Rect(rect.x, rect.y, w, h));
+            nodeView.SetPosition(new Rect(xy.x, xy.y, w, h));
             nodeView.RefreshPorts();
         }
 
@@ -574,6 +627,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 return;
 
             var rect = nodeView.GetPosition();
+            var xyTopLeft = GetAuthoritativeNodeTopLeft(nodeView);
             float layoutW = nodeView.layout.width;
             float layoutH = nodeView.layout.height;
             float resW = nodeView.resolvedStyle.width;
@@ -594,10 +648,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (float.IsNaN(w) || float.IsInfinity(w) || float.IsNaN(h) || float.IsInfinity(h))
                 return;
 
-            if (Mathf.Abs(w - rect.width) < 0.5f && Mathf.Abs(h - rect.height) < 0.5f)
+            bool sizeUnchanged = Mathf.Abs(w - rect.width) < 0.5f && Mathf.Abs(h - rect.height) < 0.5f;
+            bool posUnchanged =
+                Mathf.Abs(xyTopLeft.x - rect.x) < 0.5f &&
+                Mathf.Abs(xyTopLeft.y - rect.y) < 0.5f;
+
+            if (sizeUnchanged && posUnchanged)
                 return;
 
-            nodeView.SetPosition(new Rect(rect.x, rect.y, w, h));
+            nodeView.SetPosition(new Rect(xyTopLeft.x, xyTopLeft.y, w, h));
             nodeView.RefreshPorts();
         }
 

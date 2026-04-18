@@ -38,11 +38,85 @@ namespace VisualScripting.Core.Generators
             if (roots.Count == 0)
                 return GenerateFallback();
 
+            // Порядок создания нод в графе ни к чему не обязывает: надо эмитить источники
+            // данных раньше их потребителей, иначе в коде появятся обращения к переменным
+            // до их объявления.
+            var orderedRoots = TopologicallyOrderRoots(roots);
+
             var sb = new StringBuilder();
-            foreach (var root in roots)
+            foreach (var root in orderedRoots)
                 EmitChain(root.Id, sb, 0);
 
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>
+        /// Упорядочивает корни так, чтобы любой root, который данными питает другой root,
+        /// стоял раньше своего потребителя (стабильная DFS-сортировка, циклы пропускаются).
+        /// </summary>
+        private List<NodeData> TopologicallyOrderRoots(List<NodeData> roots)
+        {
+            var rootIds = new HashSet<string>(roots.Select(r => r.Id));
+            var visited = new HashSet<string>();
+            var onStack = new HashSet<string>();
+            var ordered = new List<NodeData>();
+
+            void Visit(string nodeId)
+            {
+                if (visited.Contains(nodeId) || onStack.Contains(nodeId))
+                    return;
+                onStack.Add(nodeId);
+
+                foreach (var depRootId in CollectDataRootDependencies(nodeId, rootIds))
+                {
+                    if (depRootId == nodeId)
+                        continue;
+                    Visit(depRootId);
+                }
+
+                onStack.Remove(nodeId);
+
+                if (visited.Add(nodeId) && _map.TryGetValue(nodeId, out var node))
+                    ordered.Add(node);
+            }
+
+            foreach (var root in roots)
+                Visit(root.Id);
+
+            return ordered;
+        }
+
+        /// <summary>
+        /// Возвращает id всех root-нод, от которых через data-связи (любые не-exec рёбра)
+        /// зависит <paramref name="nodeId"/> — прямо или транзитивно через промежуточные non-root узлы.
+        /// </summary>
+        private IEnumerable<string> CollectDataRootDependencies(string nodeId, HashSet<string> rootIds)
+        {
+            var seen = new HashSet<string>();
+            var queue = new Queue<string>();
+            queue.Enqueue(nodeId);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+
+                foreach (var edge in _graph.Edges)
+                {
+                    if (edge.ToNodeId != current)
+                        continue;
+                    if (IsExecInPort(edge.ToPort) || IsExecOutPort(edge.FromPort))
+                        continue;
+
+                    var src = edge.FromNodeId;
+                    if (!seen.Add(src))
+                        continue;
+
+                    if (rootIds.Contains(src))
+                        yield return src;
+                    else
+                        queue.Enqueue(src);
+                }
+            }
         }
 
         private string GenerateFallback()
@@ -113,6 +187,10 @@ namespace VisualScripting.Core.Generators
 
                 case NodeType.ConsoleWriteLine:
                     EmitConsoleWriteLine(node, sb, pad);
+                    break;
+
+                case NodeType.DebugLog:
+                    EmitDebugLog(node, sb, pad);
                     break;
 
                 default:
@@ -534,6 +612,16 @@ namespace VisualScripting.Core.Generators
             sb.AppendLine($"{pad}Console.WriteLine({msg});");
         }
 
+        private void EmitDebugLog(NodeData node, StringBuilder sb, string pad)
+        {
+            var msgEdge = _graph.Edges.FirstOrDefault(
+                e => e.ToNodeId == node.Id && e.ToPort == "message");
+            var msg = msgEdge != null
+                ? EmitCondExpr(msgEdge.FromNodeId)
+                : FormatConsoleLiteral(node);
+            sb.AppendLine($"{pad}Debug.Log({msg});");
+        }
+
         private static string FormatConsoleLiteral(NodeData node)
         {
             var valueType = (node.ValueType ?? "").Trim().ToLowerInvariant();
@@ -763,7 +851,7 @@ namespace VisualScripting.Core.Generators
         private bool IsStatementEntryNode(NodeData n)
         {
             if (n.Type is NodeType.FlowIf or NodeType.FlowElse or NodeType.FlowFor or NodeType.FlowWhile
-                or NodeType.ConsoleWriteLine)
+                or NodeType.ConsoleWriteLine or NodeType.DebugLog)
                 return true;
 
             if (IsLiteral(n.Type) && !string.IsNullOrEmpty(n.VariableName) &&
