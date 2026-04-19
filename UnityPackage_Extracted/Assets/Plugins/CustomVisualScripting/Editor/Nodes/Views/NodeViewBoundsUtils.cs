@@ -72,14 +72,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 or NodeType.ConsoleWriteLine or NodeType.DebugLog;
 
         /// <summary>
-        /// Нужно ли убрать стандартный collapse GraphView (стрелка у заголовка). Для Flow — не убираем.
+        /// Стандартный collapse GraphView (стрелка у заголовка, сворачивающая плашки портов)
+        /// отключён у всех нод без исключений — ни Flow, ни Debug, ни Math/Logic и т.д.
         /// </summary>
-        public static bool ShouldStripUnityPortCollapseChrome(BaseNodeView nodeView)
-        {
-            if (nodeView?.nodeTarget is not CustomBaseNode cn)
-                return true;
-            return !IsFlowCategoryNodeType(cn.NodeType);
-        }
+        public static bool ShouldStripUnityPortCollapseChrome(BaseNodeView nodeView) =>
+            nodeView != null;
 
         /// <summary>
         /// Левый верх ноды в координатах содержимого графа. У «тяжёлых» NodeView до первого прохода layout

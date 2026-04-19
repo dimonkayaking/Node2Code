@@ -54,11 +54,11 @@ namespace CustomVisualScripting.Editor.Windows
         private CSharpProcessRunner _csharpRunner;
         private bool _forceAutoLayoutNextUpdate;
         
-        [MenuItem("Tools/Visual Scripting")]
+        [MenuItem("Tools/Node2Code")]
         public static void OpenWindow()
         {
             var window = GetWindow<VisualScriptingWindow>();
-            window.titleContent = new GUIContent("Visual Scripting");
+            window.titleContent = new GUIContent("Node2Code");
             window.minSize = new Vector2(900, 600);
             window.Show();
         }
