@@ -83,6 +83,19 @@ function App() {
               <Route path="/terms" element={<Terms />} />
             </Routes>
           </main>
+          <a
+            className="floating-logo-link"
+            href="https://www.tacomo.ru/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Перейти на сайт Tacomo"
+          >
+            <img
+              className="floating-logo"
+              src="/logo.png"
+              alt="Tacomo logo"
+            />
+          </a>
 
           <Footer />
           <LogoutModal />

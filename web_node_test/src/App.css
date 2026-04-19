@@ -114,3 +114,29 @@ body.dark .site-footer a {
   padding-top: 60px;
   min-height: calc(100vh - 120px);
 }
+
+.floating-logo-link {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: clamp(40px, 5vw, 64px);
+  z-index: 950;
+  display: block;
+  line-height: 0;
+}
+
+.floating-logo {
+  width: 100%;
+  height: auto;
+  user-select: none;
+  opacity: 0.95;
+  transition: filter 0.2s ease;
+}
+
+body.dark .floating-logo {
+  filter: none;
+}
+
+body.light .floating-logo {
+  filter: invert(1);
+}
