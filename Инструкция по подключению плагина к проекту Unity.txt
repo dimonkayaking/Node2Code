@@ -1,0 +1,19 @@
+ПОДКЛЮЧЕНИЕ ПЛАГИНА
+
+1. Скачайте файл Node2Code.unitypackage с сайта
+2. Откройте ваш проект в Unity
+3. Нажмите Assets -> Import Package -> Custom Package
+4. Выберите скачанный файл
+5. Нажмите Import
+6. Откройте: Window → Package Manager
+7. Нажмите кнопку + (плюс) в левом верхнем углу
+8. Выберите Add package from git URL...
+9. Вставьте ссылку:
+https://github.com/Warwlock/NodeGraphProcessor.git
+10.  Нажмите Add
+11. В Package Manager снова нажмите +
+12. Выберите Add package by name...
+13. Введите:
+com.unity.nuget.newtonsoft-json
+14. Нажмите Add
+15. Откройте плагин: в меню Unity выберите Tools → Visual Scripting
