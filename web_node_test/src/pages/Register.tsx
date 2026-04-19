@@ -16,7 +16,9 @@ const Register: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof RegisterFormValues, string>>>({});
+  const [termsError, setTermsError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -38,11 +40,19 @@ const Register: React.FC = () => {
 
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors);
+      setTermsError('');
       setSubmitError('Исправьте ошибки в форме перед регистрацией');
       return;
     }
 
+    if (!acceptedTerms) {
+      setTermsError('Для регистрации необходимо принять пользовательское соглашение и политику конфиденциальности');
+      setSubmitError('Подтвердите согласие с документами перед регистрацией');
+      return;
+    }
+
     setErrors({});
+    setTermsError('');
     setSubmitError('');
     setIsSubmitting(true);
 
@@ -225,6 +235,25 @@ const Register: React.FC = () => {
             />
             {errors.confirmPassword ? <p className="field-error">{errors.confirmPassword}</p> : null}
           </div>
+          <div className="terms-consent">
+            <input
+              id="register-accept-terms"
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => {
+                setAcceptedTerms(e.target.checked);
+                if (e.target.checked) {
+                  setTermsError('');
+                }
+              }}
+              aria-invalid={Boolean(termsError)}
+            />
+            <label htmlFor="register-accept-terms">
+              Я принимаю <Link to="/terms">Пользовательское соглашение</Link> и{' '}
+              <Link to="/privacy">Политику конфиденциальности</Link>
+            </label>
+          </div>
+          {termsError ? <p className="field-error">{termsError}</p> : null}
           {submitError ? <p className="form-error">{submitError}</p> : null}
           <button type="submit" className="auth-button" disabled={isSubmitting}>
             {isSubmitting ? 'Регистрируем...' : 'Зарегистрироваться'}

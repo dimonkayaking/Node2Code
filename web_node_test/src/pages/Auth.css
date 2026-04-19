@@ -67,6 +67,33 @@
   margin: -0.25rem 0 1rem;
 }
 
+.terms-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: -0.25rem 0 1rem;
+}
+
+.terms-consent input {
+  width: auto;
+  margin-top: 0.15rem;
+}
+
+.terms-consent label {
+  color: #333;
+  line-height: 1.4;
+}
+
+.terms-consent a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.terms-consent a:hover {
+  text-decoration: underline;
+}
+
 .auth-button {
   width: 100%;
   padding: 0.75rem;
@@ -109,6 +136,14 @@ body.dark .auth-card h2,
 body.dark .form-group label,
 body.dark .auth-link {
   color: #f8fafc;
+}
+
+body.dark .terms-consent label {
+  color: #f8fafc;
+}
+
+body.dark .terms-consent a {
+  color: #93c5fd;
 }
 
 body.dark .form-group input {

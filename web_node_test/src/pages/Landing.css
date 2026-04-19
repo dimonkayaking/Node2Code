@@ -94,6 +94,12 @@ body.dark .landing-eyebrow {
   font-size: clamp(2.45rem, 4.35vw, 4.15rem);
   line-height: 1.02;
   letter-spacing: -0.04em;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.no-wrap {
+  white-space: nowrap;
 }
 
 .landing-hero__lead {
