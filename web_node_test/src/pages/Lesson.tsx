@@ -1,36 +1,77 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { allLessonIds, courseModules, getLessonById } from '../data/courseData';
 import './Lesson.css';
 
-const getEmbedUrl = (url?: string) => {
-  if (!url) return null;
+type VideoSource =
+  | { kind: 'youtube'; url: string }
+  | { kind: 'direct'; url: string }
+  | { kind: 'none'; url: null };
+
+const getVideoSource = (url?: string): VideoSource => {
+  if (!url) return { kind: 'none', url: null };
+
+  const normalizedUrl = url.trim();
+  if (!normalizedUrl) return { kind: 'none', url: null };
+
+  // Support local static assets like /videos/lesson.mp4
+  if (normalizedUrl.startsWith('/')) {
+    const path = normalizedUrl.toLowerCase();
+    return path.endsWith('.mp4')
+      ? { kind: 'direct', url: normalizedUrl }
+      : { kind: 'none', url: null };
+  }
 
   try {
-    const parsed = new URL(url);
-    const videoId = parsed.hostname.includes('youtu.be')
-      ? parsed.pathname.slice(1)
-      : parsed.searchParams.get('v');
+    const parsed = new URL(normalizedUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    const filename = (parsed.searchParams.get('filename') || '').toLowerCase();
+    const contentType = (parsed.searchParams.get('content_type') || '').toLowerCase();
 
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+    if (hostname.includes('youtu.be') || hostname.includes('youtube.com')) {
+      const videoId = hostname.includes('youtu.be')
+        ? parsed.pathname.slice(1)
+        : parsed.searchParams.get('v');
+
+      return videoId
+        ? { kind: 'youtube', url: `https://www.youtube.com/embed/${videoId}` }
+        : { kind: 'none', url: null };
+    }
+
+    const isDirectVideoLink =
+      pathname.endsWith('.mp4') ||
+      filename.endsWith('.mp4') ||
+      contentType.startsWith('video/');
+
+    if (isDirectVideoLink) {
+      return { kind: 'direct', url: normalizedUrl };
+    }
+
+    return { kind: 'none', url: null };
   } catch {
-    return null;
+    return { kind: 'none', url: null };
   }
 };
+
+const QUIZ_STORAGE_KEY = 'node2code_lesson_quiz_answers';
+
+const getQuizStorageKey = (userId?: number) =>
+  userId ? `${QUIZ_STORAGE_KEY}_${userId}` : `${QUIZ_STORAGE_KEY}_guest`;
 
 const Lesson: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { markLessonCompleted } = useAppContext();
+  const { user, markLessonCompleted } = useAppContext();
   const lessonId = id ? Number(id) : 1;
   const lessonEntry = getLessonById(lessonId) || getLessonById(1);
 
   const [code, setCode] = useState('// Опишите решение или вставьте свой фрагмент логики здесь');
   const [taskStatus, setTaskStatus] = useState('');
   const [taskSolved, setTaskSolved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'theory' | 'task'>('theory');
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [selectedQuizAnswers, setSelectedQuizAnswers] = useState<Record<string, string>>({});
 
   const fallbackModule = courseModules[0];
   const fallbackLesson = fallbackModule.lessons[0];
@@ -38,10 +79,89 @@ const Lesson: React.FC = () => {
   const lesson = lessonEntry?.lesson || fallbackLesson;
   const currentIndex = allLessonIds.indexOf(lesson.id);
   const nextLessonId = currentIndex >= 0 && currentIndex < allLessonIds.length - 1 ? allLessonIds[currentIndex + 1] : null;
-  const isTheoryOnlyLesson = lesson.format === 'theory' && !lesson.task;
-  const embedUrl = getEmbedUrl(lesson.videoUrl);
+  const selectedQuiz = lesson.quiz;
+  const quizQuestions = useMemo(() => {
+    if (!selectedQuiz) {
+      return [];
+    }
 
-  const relatedPractice = useMemo(() => module.practice, [module]);
+    if (selectedQuiz.questions && selectedQuiz.questions.length > 0) {
+      return selectedQuiz.questions;
+    }
+
+    if (selectedQuiz.question && selectedQuiz.options) {
+      return [{ id: `lesson-${lesson.id}`, question: selectedQuiz.question, options: selectedQuiz.options }];
+    }
+
+    return [];
+  }, [selectedQuiz, lesson.id]);
+  const hasSidePanel = Boolean(lesson.task) || quizQuestions.length > 0;
+  const isTheoryOnlyLesson = !hasSidePanel;
+  const videoSource = getVideoSource(lesson.videoUrl);
+  const quizStorageKey = getQuizStorageKey(user?.id);
+
+  useEffect(() => {
+    const sanitizeAnswers = (answers: Record<string, string>) =>
+      quizQuestions.reduce<Record<string, string>>((acc, question) => {
+        const answerId = answers[question.id];
+        if (!answerId) {
+          return acc;
+        }
+
+        const isValidOption = question.options.some((option) => option.id === answerId);
+        if (isValidOption) {
+          acc[question.id] = answerId;
+        }
+        return acc;
+      }, {});
+
+    try {
+      const rawAnswers = window.localStorage.getItem(quizStorageKey);
+      if (!rawAnswers) {
+        setSelectedQuizAnswers({});
+        return;
+      }
+
+      const savedAnswers = JSON.parse(rawAnswers) as Record<string, unknown>;
+      const lessonSavedAnswer = savedAnswers[String(lesson.id)];
+
+      if (lessonSavedAnswer && typeof lessonSavedAnswer === 'object') {
+        setSelectedQuizAnswers(sanitizeAnswers(lessonSavedAnswer as Record<string, string>));
+        return;
+      }
+
+      if (typeof lessonSavedAnswer === 'string' && quizQuestions[0]) {
+        setSelectedQuizAnswers(sanitizeAnswers({ [quizQuestions[0].id]: lessonSavedAnswer }));
+        return;
+      }
+
+      setSelectedQuizAnswers({});
+    } catch {
+      setSelectedQuizAnswers({});
+    }
+  }, [lesson.id, quizQuestions, quizStorageKey]);
+
+  const handleQuizAnswerChange = (questionId: string, optionId: string) => {
+    const question = quizQuestions.find((item) => item.id === questionId);
+    const selectedOptionId = selectedQuizAnswers[questionId];
+    const hasValidSavedAnswer = question?.options.some((option) => option.id === selectedOptionId);
+
+    if (hasValidSavedAnswer) {
+      return;
+    }
+
+    const nextAnswers = { ...selectedQuizAnswers, [questionId]: optionId };
+    setSelectedQuizAnswers(nextAnswers);
+
+    try {
+      const rawAnswers = window.localStorage.getItem(quizStorageKey);
+      const savedAnswers = rawAnswers ? (JSON.parse(rawAnswers) as Record<string, unknown>) : {};
+      savedAnswers[String(lesson.id)] = nextAnswers;
+      window.localStorage.setItem(quizStorageKey, JSON.stringify(savedAnswers));
+    } catch {
+      window.localStorage.setItem(quizStorageKey, JSON.stringify({ [lesson.id]: nextAnswers }));
+    }
+  };
 
   const checkTask = () => {
     const trimmed = code.trim();
@@ -78,13 +198,22 @@ const Lesson: React.FC = () => {
     }
   };
 
+  const goToModule = () => {
+    if (module?.id) {
+      navigate(`/topic/${module.id}`);
+      return;
+    }
+
+    navigate('/course');
+  };
+
   return (
     <div className="lesson-page">
       <div className={`lesson-container ${isTheoryOnlyLesson ? 'lesson-container--theory-only' : ''}`}>
         <div className={`lesson-content ${isTheoryOnlyLesson ? 'lesson-content--centered' : ''}`}>
           <div className="lesson-header">
             <div>
-              <Link to={`/topic/${module.id}`} className="back-link">← Назад к модулю {module.order}</Link>
+              <button type="button" className="back-link" onClick={goToModule}>← Назад к модулю {module.order}</button>
               <h1>{lesson.title}</h1>
               <p className="lesson-subtitle">{module.title}</p>
             </div>
@@ -97,21 +226,28 @@ const Lesson: React.FC = () => {
           </div>
 
           <div className="lesson-video">
-            <div className={`video-player ${embedUrl ? 'video-player--embedded' : ''}`}>
-              {embedUrl && (
+            <div className={`video-player ${videoSource.kind !== 'none' ? 'video-player--embedded' : ''}`}>
+              {videoSource.kind === 'youtube' && (
                 <iframe
                   className="video-embed"
-                  src={embedUrl}
+                  src={videoSource.url}
                   title={lesson.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   referrerPolicy="strict-origin-when-cross-origin"
                   allowFullScreen
                 />
               )}
-              <div className="video-placeholder">
-                <div className="play-button">▶</div>
-                <p>Здесь будет встроенное видео урока из Rutube</p>
-              </div>
+              {videoSource.kind === 'direct' && (
+                <video className="video-embed" controls preload="metadata" src={videoSource.url}>
+                  Ваш браузер не поддерживает воспроизведение видео.
+                </video>
+              )}
+              {videoSource.kind === 'none' && (
+                <div className="video-placeholder">
+                  <div className="play-button">▶</div>
+                  <p>Здесь будет встроенное видео урока</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -120,28 +256,26 @@ const Lesson: React.FC = () => {
             <p>{lesson.summary}</p>
 
             <h2>Теория</h2>
-            <div className="theory-list">
+            <ul className="compact-points">
               {lesson.theory.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+                <li key={paragraph}>{paragraph}</li>
               ))}
-            </div>
+            </ul>
 
             <div className="lesson-note">
               <strong>Цель модуля:</strong> {module.goal}
             </div>
 
-            <div className="lesson-note">
-              <strong>Практика модуля:</strong>
-              <ul className="module-practice-inline">
-                {relatedPractice.length > 0 ? (
-                  relatedPractice.map((item, index) => (
-                    <li key={`${item.type}-${index}`}>{item.type}: {item.text}</li>
-                  ))
-                ) : (
-                  <li>Этот модуль завершает курс и задает вектор дальнейшего развития.</li>
-                )}
-              </ul>
-            </div>
+            {lesson.cheatSheet && lesson.cheatSheet.length > 0 && (
+              <div className="lesson-note">
+                <strong>{lesson.cheatSheetTitle || 'Шпаргалка'}</strong>
+                <ol className="compact-points compact-points--ordered">
+                  {lesson.cheatSheet.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
 
           {lesson.format === 'theory' && (
@@ -151,25 +285,67 @@ const Lesson: React.FC = () => {
           )}
         </div>
 
-        {lesson.format === 'practice' && (
+        {hasSidePanel && (
           <aside className="lesson-task-area">
-            <div className="task-switcher">
-              <button onClick={() => setActiveTab('theory')} className={activeTab === 'theory' ? 'active' : ''}>Теория</button>
-              <button onClick={() => setActiveTab('task')} className={activeTab === 'task' ? 'active' : ''}>Задание</button>
-            </div>
+            <div className="task-box">
+              {quizQuestions.length > 0 && selectedQuiz && (
+                <div className="lesson-side-quiz">
+                  <h2>Тест</h2>
+                  {quizQuestions.map((quizQuestion, index) => {
+                    const selectedOptionId = selectedQuizAnswers[quizQuestion.id] || null;
+                    const selectedOption = quizQuestion.options.find((option) => option.id === selectedOptionId) || null;
+                    const correctOption = quizQuestion.options.find((option) => option.isCorrect) || null;
+                    const isQuestionLocked = Boolean(selectedOption);
 
-            {activeTab === 'theory' ? (
-              <div className="task-box">
-                <h2>Краткая опора</h2>
-                <p>{lesson.summary}</p>
-                <ul className="compact-points">
-                  {lesson.theory.map((paragraph) => (
-                    <li key={paragraph}>{paragraph}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="task-box">
+                    return (
+                      <div key={quizQuestion.id} className="lesson-note lesson-note--quiz">
+                        <p className="lesson-quiz__question">
+                          <strong>Вопрос {index + 1}.</strong> {quizQuestion.question}
+                        </p>
+                        <div className="lesson-quiz__options">
+                          {quizQuestion.options.map((option) => (
+                            <label
+                              key={option.id}
+                              className={`lesson-quiz__option ${selectedOptionId === option.id ? 'lesson-quiz__option--selected' : ''}`}
+                            >
+                              <input
+                                type="radio"
+                                name={`lesson-quiz-${lesson.id}-${quizQuestion.id}`}
+                                value={option.id}
+                                checked={selectedOptionId === option.id}
+                                onChange={() => handleQuizAnswerChange(quizQuestion.id, option.id)}
+                                disabled={isQuestionLocked}
+                              />
+                              <span>{option.text}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        {selectedOption && (
+                          <>
+                            <p
+                              className={`lesson-quiz__result ${
+                                selectedOption.isCorrect ? 'lesson-quiz__result--correct' : 'lesson-quiz__result--incorrect'
+                              }`}
+                            >
+                              {selectedOption.isCorrect ? selectedQuiz.correctMessage : selectedQuiz.incorrectMessage}
+                            </p>
+
+                            {!selectedOption.isCorrect && correctOption && (
+                              <p className="lesson-quiz__answer">
+                                <strong>Правильный ответ:</strong> {correctOption.text}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {lesson.task && (
+                <>
                 <h2>Задание</h2>
                 <p>{lesson.task || 'Зафиксируйте, как вы будете применять идеи урока на практике.'}</p>
 
@@ -188,8 +364,9 @@ const Lesson: React.FC = () => {
                     {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
                   </button>
                 )}
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </aside>
         )}
       </div>

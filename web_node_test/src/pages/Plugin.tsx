@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import './Plugin.css';
 
 const capabilities = [
@@ -20,21 +20,6 @@ const capabilities = [
   },
 ];
 
-const screenshots = [
-  {
-    title: 'Редактор нод',
-    text: 'Холст, панель поиска нод и инспектор для настройки выбранного блока.',
-  },
-  {
-    title: 'Генерация C#',
-    text: 'Переход от визуального дерева к читаемому C# скрипту с понятной структурой.',
-  },
-  {
-    title: 'Компиляция в граф',
-    text: 'Разбор готового кода в визуальную схему для анализа ветвлений, циклов и связей.',
-  },
-];
-
 const Plugin: React.FC = () => {
   return (
     <section className="plugin-page">
@@ -43,7 +28,7 @@ const Plugin: React.FC = () => {
           <span className="plugin-badge">Платформа для Unity-плагина</span>
           <h1>Плагин, который связывает визуальное программирование и C# в одном рабочем процессе</h1>
           <p>
-            UnityNodeBridge помогает собирать игровую логику в виде нод, переводить её в C#
+            Node2Code помогает собирать игровую логику в виде нод, переводить её в C#
             и, наоборот, разбирать написанный код обратно в понятный визуальный граф.
             Это удобный инструмент и для быстрого прототипирования, и для постепенного перехода
             от наглядной схемы к полноценной разработке на Unity.
@@ -97,7 +82,7 @@ const Plugin: React.FC = () => {
           </div>
 
           <div className="install-grid">
-            <a className="install-tile" href="/image.png" download="unity-node-bridge-package.png">
+            <a className="install-tile" href="/node2code-plugin.zip" download="плагин.zip">
               <strong>Скачать плагин</strong>
               <span>Единая версия пакета для работы на любой поддерживаемой операционной системе</span>
             </a>
@@ -114,7 +99,7 @@ const Plugin: React.FC = () => {
             </p>
           </div>
 
-          <a className="doc-link" href="#">
+          <a className="doc-link" href="/node2code-documentation.pdf" download="NODE2CODE-ДОКУМЕНТАЦИЯ.pdf">
             <span className="doc-link__icon">PDF</span>
             <span>
               <strong>Скачать документацию</strong>
@@ -127,9 +112,9 @@ const Plugin: React.FC = () => {
       <section className="plugin-card plugin-card--overview">
         <div className="plugin-card__head">
           <span className="plugin-eyebrow">Описание плагина</span>
-          <h2>Что умеет UnityNodeBridge</h2>
+          <h2>Что умеет Node2Code</h2>
           <p>
-            UnityNodeBridge нужен не только для визуального программирования, но и для глубокого
+            Node2Code нужен не только для визуального программирования, но и для глубокого
             понимания того, как игровая логика выглядит в коде. Он помогает быстро собирать механику,
             читать связи между блоками, анализировать результат в C# и расширять стандартный набор
             возможностей за счет обычных скриптов и логики проекта.
@@ -164,7 +149,7 @@ const Plugin: React.FC = () => {
           <div className="plugin-description-block">
             <h3>Где это особенно полезно</h3>
             <p>
-              UnityNodeBridge хорошо подходит для быстрого прототипирования, работы с наглядной
+              Node2Code хорошо подходит для быстрого прототипирования, работы с наглядной
               игровой логикой, обучения и ситуаций, где важно быстро увидеть структуру поведения.
               При этом сложные вычисления и нестандартные сценарии можно оставлять в коде,
               сохраняя единый рабочий процесс между визуальной логикой и C#.
@@ -173,26 +158,6 @@ const Plugin: React.FC = () => {
         </div>
       </section>
 
-      <section className="plugin-card plugin-card--screens">
-        <div className="plugin-card__head">
-          <span className="plugin-eyebrow">Скриншоты</span>
-          <h2>Ключевые экраны продукта</h2>
-          <p>
-            Ниже показаны основные зоны интерфейса, которые помогают работать с визуальной логикой,
-            переходом в код и обратным анализом готовых скриптов.
-          </p>
-        </div>
-
-        <div className="screenshots-grid">
-          {screenshots.map((item) => (
-            <article key={item.title} className="shot-card">
-              <div className="shot-placeholder">{item.title}</div>
-              <h3>{item.title}</h3>
-              <p>{item.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
     </section>
   );
 };

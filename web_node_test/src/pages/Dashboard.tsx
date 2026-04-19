@@ -40,7 +40,7 @@ const Dashboard: React.FC = () => {
     <div className="dashboard">
       <nav className="dashboard-nav">
         <div className="nav-container">
-          <div className="logo">UnityNodeBridge</div>
+          <div className="logo">Node2Code</div>
           <div className="user-info">
             <span>Привет, {user ? `${user.name} ${user.lastName}` : 'гость'}!</span>
             <Link to="/" className="logout-btn">Выйти</Link>

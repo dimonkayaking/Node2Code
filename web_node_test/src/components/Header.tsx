@@ -13,7 +13,8 @@ const Header: React.FC = () => {
     <header className={`site-header ${theme}`}>
       <div className="header-container">
         <Link to="/" className="logo" onClick={hideMobileMenu}>
-          UnityNodeBridge
+          <img src="/favicon.png" alt="Node2Code logo" className="logo-image" />
+          <span>Node2Code</span>
         </Link>
 
         <button className="burger" onClick={() => setMobileMenuOpen((s) => !s)} aria-label="Меню">
@@ -39,6 +40,7 @@ const Header: React.FC = () => {
             </>
           ) : (
             <>
+              <Link to="/plugin" onClick={hideMobileMenu}>Плагин</Link>
               <button className="icon-btn" onClick={toggleTheme} title="Переключить тему">💡</button>
               <Link to="/login" onClick={hideMobileMenu}>Войти</Link>
               <Link to="/register" className="btn-primary" onClick={hideMobileMenu}>Регистрация</Link>

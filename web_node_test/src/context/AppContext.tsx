@@ -58,8 +58,8 @@ const initialContext: AppContextType = {
   markLessonCompleted: async () => {},
 };
 
-const STORAGE_KEY = 'realden_user';
-const THEME_STORAGE_KEY = 'realden_theme';
+const STORAGE_KEY = 'node2code_user';
+const THEME_STORAGE_KEY = 'node2code_theme';
 const AppContext = createContext<AppContextType>(initialContext);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

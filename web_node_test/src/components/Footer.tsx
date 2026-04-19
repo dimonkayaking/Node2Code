@@ -7,7 +7,7 @@ const Footer: React.FC = () => {
     <footer className="site-footer">
       <div className="footer-inner">
         <p>
-          Техподдержка: <a href="mailto:support@unity-node-bridge.ru">support@unity-node-bridge.ru</a>
+          Техподдержка: <a href="mailto:node2code@mail.ru">node2code@mail.ru</a>
         </p>
         <div className="footer-links">
           <Link to="/plugin">Описание плагина</Link>

@@ -3,6 +3,26 @@ export type PracticeItem = {
   text: string;
 };
 
+export type LessonQuizOption = {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+};
+
+export type LessonQuizQuestion = {
+  id: string;
+  question: string;
+  options: LessonQuizOption[];
+};
+
+export type LessonQuiz = {
+  question?: string;
+  options?: LessonQuizOption[];
+  questions?: LessonQuizQuestion[];
+  correctMessage: string;
+  incorrectMessage: string;
+};
+
 export type LessonItem = {
   id: number;
   title: string;
@@ -10,7 +30,10 @@ export type LessonItem = {
   duration: string;
   format: 'theory' | 'practice';
   theory: string[];
+  cheatSheet?: string[];
+  cheatSheetTitle?: string;
   videoUrl?: string;
+  quiz?: LessonQuiz;
   task?: string;
   successHint?: string;
 };
@@ -34,51 +57,208 @@ export const courseModules: ModuleItem[] = [
       {
         id: 1,
         title: 'Урок 1.1: Установка Unity',
-        summary: 'Скачивание Unity Hub, выбор актуальной LTS или Unity 6 и создание первого 2D/3D проекта.',
-        duration: '12 мин',
+        summary: 'Загрузка Unity Hub, выбор версии редактора и создание первого 2D/3D проекта.',
+        duration: '3 мин',
         format: 'theory',
-        videoUrl: 'https://youtu.be/Qo93Jtso0k8',
+        videoUrl: '/videos/Lesson_1.1_video.mp4',
         theory: [
-          'Разбираем, зачем нужен Unity Hub и как через него управлять версиями редактора и проектами.',
-          'Показываем, как выбрать стабильную версию движка для обучения: LTS или Unity 6.',
-          'На практике создаем первый проект и фиксируем базовую структуру рабочего пространства.',
+          'Unity Hub нужен для установки редактора, управления версиями Unity и быстрого запуска проектов.',
+          'Для обучения лучше выбирать стабильную версию: LTS или Unity 6, чтобы избежать лишних проблем совместимости.',
+          'При создании первого проекта важно сразу определить, будет он 2D или 3D, и проверить базовую структуру проекта.',
         ],
+        cheatSheet: [
+          'Установить Unity Hub с сайта unity.com.',
+          'Установить Unity 6 через Hub: Installs -> Install Editor -> выбрать Unity 6 -> добавить модуль сборки для вашей ОС.',
+          'Активировать лицензию Unity Personal.',
+          'Создать проект: Projects -> New Project -> выбрать шаблон 2D URP -> указать имя и место -> создать.',
+          'Убедиться, что редактор открылся и нет ошибок.',
+        ],
+        quiz: {
+          questions: [
+            {
+              id: 'hub',
+              question: 'Какой инструмент используется для управления версиями Unity и проектами?',
+              options: [
+                { id: 'hub_a', text: 'Unity Editor', isCorrect: false },
+                { id: 'hub_b', text: 'Unity Hub', isCorrect: true },
+                { id: 'hub_c', text: 'Package Manager', isCorrect: false },
+                { id: 'hub_d', text: 'Visual Studio', isCorrect: false },
+              ],
+            },
+            {
+              id: 'template',
+              question: 'Какой шаблон проекта мы выбрали для создания первого проекта?',
+              options: [
+                { id: 'template_a', text: '3D Core', isCorrect: false },
+                { id: 'template_b', text: '2D Core', isCorrect: false },
+                { id: 'template_c', text: '2D URP', isCorrect: true },
+                { id: 'template_d', text: 'Universal 3D', isCorrect: false },
+              ],
+            },
+            {
+              id: 'check',
+              question: 'Что нужно сделать после установки редактора, чтобы убедиться в его работоспособности?',
+              options: [
+                { id: 'check_a', text: 'Создать новый C# скрипт', isCorrect: false },
+                { id: 'check_b', text: 'Импортировать плагин', isCorrect: false },
+                { id: 'check_c', text: 'Открыть окно Console и проверить отсутствие красных ошибок', isCorrect: true },
+                { id: 'check_d', text: 'Нажать кнопку Play', isCorrect: false },
+              ],
+            },
+          ],
+          correctMessage: 'Верно.',
+          incorrectMessage: 'Неверно.',
+        },
       },
       {
         id: 2,
         title: 'Урок 1.2: Обзор интерфейса Unity',
-        summary: 'Scene, Hierarchy, Inspector и Project: какие задачи решает каждое окно и как они связаны.',
-        duration: '14 мин',
+        summary: 'Назначение окон Scene, Hierarchy, Inspector и Project и их роль в ежедневной работе.',
+        duration: '2 мин',
         format: 'theory',
+        videoUrl: '/videos/Lesson_1.2_video.mp4',
         theory: [
-          'Пошагово разбираем четыре главных окна Unity и объясняем, за что отвечает каждое из них.',
-          'Связываем окна с реальными действиями: создание объектов, настройка компонентов и работа с файлами.',
-          'Формируем у ученика привычную карту интерфейса, чтобы дальше обучение не тормозилось из-за навигации.',
+          'Scene - окно редактирования сцены: размещение, перемещение и изменение объектов в мире.',
+          'Game - предварительный просмотр игры с точки зрения камеры, то есть то, что увидит игрок.',
+          'Hierarchy показывает список всех объектов текущей сцены и их вложенность.',
+          'Inspector показывает параметры выбранного объекта: компоненты, свойства и настройки.',
+          'Project отображает файловую систему проекта (Assets): скрипты, сцены, текстуры и префабы.',
+          'Console выводит сообщения, предупреждения и ошибки, которые помогают при отладке.',
+          'Окна можно перетаскивать и закреплять (dock), а открывать через меню Window.',
+          'На верхней панели инструментов используются Hand, Move, Rotate, Scale, Rect, а также Play и Pause.',
+          'В режиме Play изменения в редакторе после остановки не сохраняются.',
         ],
-      },
-      {
-        id: 3,
-        title: 'Урок 1.3: Знакомство с плагином',
-        summary: 'Импорт плагина в проект, открытие редактора нод и обзор холста, поиска и инспектора ноды.',
-        duration: '15 мин',
-        format: 'practice',
-        theory: [
-          'Импортируем плагин в Unity-проект и проверяем, что он корректно появился в интерфейсе.',
-          'Показываем устройство окна визуального редактора: холст, панель поиска нод и инспектор настроек.',
-          'Объясняем, как этот инструмент будет связывать визуальную логику и C# на протяжении всего курса.',
+        cheatSheet: [
+          'Scene - редактирование мира.',
+          'Game - вид от камеры.',
+          'Hierarchy - список всех объектов на сцене.',
+          'Inspector - настройки выделенного объекта (Transform и др.).',
+          'Project - файлы проекта (Assets).',
+          'Console - сообщения и ошибки.',
+          'Move / Rotate / Scale - инструменты трансформации.',
+          'Play (>) - запуск игры.',
         ],
-        task: 'Импортируйте плагин в проект и опишите в кодовом поле три ключевые части интерфейса редактора нод: холст, поиск нод и инспектор.',
-        successHint: 'Ожидается упоминание холста, панели поиска нод и инспектора.',
+        quiz: {
+          questions: [
+            {
+              id: 'hierarchy_window',
+              question: 'В каком окне Unity отображается список всех объектов на текущей сцене?',
+              options: [
+                { id: 'hierarchy_window_a', text: 'Scene', isCorrect: false },
+                { id: 'hierarchy_window_b', text: 'Game', isCorrect: false },
+                { id: 'hierarchy_window_c', text: 'Hierarchy', isCorrect: true },
+                { id: 'hierarchy_window_d', text: 'Project', isCorrect: false },
+              ],
+            },
+            {
+              id: 'play_button',
+              question: 'Какая кнопка на панели инструментов отвечает за запуск игры в редакторе?',
+              options: [
+                { id: 'play_button_a', text: 'Pause', isCorrect: false },
+                { id: 'play_button_b', text: 'Play', isCorrect: true },
+                { id: 'play_button_c', text: 'Step', isCorrect: false },
+                { id: 'play_button_d', text: 'Hand Tool', isCorrect: false },
+              ],
+            },
+            {
+              id: 'play_mode_changes',
+              question: 'Что происходит с изменениями, сделанными в режиме игры (Play mode), после его остановки?',
+              options: [
+                { id: 'play_mode_changes_a', text: 'Изменения сохраняются автоматически', isCorrect: false },
+                { id: 'play_mode_changes_b', text: 'Изменения сохраняются только если нажать Save', isCorrect: false },
+                { id: 'play_mode_changes_c', text: 'Изменения не сохраняются', isCorrect: true },
+                { id: 'play_mode_changes_d', text: 'Изменения сохраняются в отдельный файл', isCorrect: false },
+              ],
+            },
+          ],
+          correctMessage: 'Верно.',
+          incorrectMessage: 'Неверно.',
+        },
       },
+        {
+          id: 3,
+          title: 'Урок 1.3: Подключение плагина визуального программирования',
+          summary: 'Установка плагина через Package Manager или Asset Store и знакомство с окном графа.',
+          duration: '15 мин',
+          format: 'theory',
+          theory: [
+            'Плагин — это дополнительный модуль, расширяющий возможности Unity. В этом курсе он позволяет собирать логику через визуальные ноды.',
+            'Для импорта убедитесь, что проект открыт, затем перетащите .unitypackage в окно Project или дважды кликните по файлу.',
+            'В окне Import Unity Package проверьте, что нужные файлы отмечены, и нажмите Import.',
+            'После импорта в Project появится папка с файлами плагина.',
+            'Окно визуального редактора открывается через меню Tools -> Visual Scripting.',
+            'Окно можно закрепить рядом со Scene/Game, перетаскивая вкладку.',
+            'Верхняя панель редактора содержит действия генерации C#, генерации нодового дерева, сохранения/загрузки и очистки холста.',
+            'Холст (Canvas) — основная рабочая зона, где размещаются и связываются ноды.',
+            'Панель поиска (Search Menu) вызывается правым кликом по холсту через Create Node.',
+            'Порты нод служат для передачи данных и сигналов: входы слева, выходы справа.',
+            'По холсту можно перемещаться средней кнопкой мыши, масштабировать колесиком.',
+            'Связи создаются протягиванием линии от выходного порта одной ноды к входному порту другой.',
+          ],
+          cheatSheetTitle: 'Инструкция',
+          cheatSheet: [
+            'Скачайте файл Node2Code.unitypackage с сайта',
+            'Откройте ваш проект в Unity',
+            'Нажмите Assets -> Import Package -> Custom Package',
+            'Выберите скачанный файл',
+            'Нажмите Import',
+            'Откройте: Window -> Package Manager',
+            'Нажмите кнопку + (плюс) в левом верхнем углу',
+            'Выберите Add package from git URL...',
+            'Вставьте ссылку: https://github.com/Warwlock/NodeGraphProcessor.git',
+            'Нажмите Add',
+            'В Package Manager снова нажмите +',
+            'Выберите Add package by name...',
+            'Введите: com.unity.nuget.newtonsoft-json',
+            'Нажмите Add',
+            'Откройте плагин: в меню Unity выберите Tools -> Visual Scripting',
+          ],
+          quiz: {
+            questions: [
+              {
+                id: 'plugin_import',
+                question: 'Как добавить загруженный плагин (файл .unitypackage) в открытый проект Unity?',
+                options: [
+                  { id: 'plugin_import_a', text: 'Через меню Assets -> Import Package -> Custom Package', isCorrect: false },
+                  { id: 'plugin_import_b', text: 'Перетащить файл в окно Project или дважды кликнуть по нему', isCorrect: true },
+                  { id: 'plugin_import_c', text: 'Через Window -> Package Manager', isCorrect: false },
+                  { id: 'plugin_import_d', text: 'Через File -> Import', isCorrect: false },
+                ],
+              },
+              {
+                id: 'open_editor_menu',
+                question: 'Через какое меню в Unity можно открыть окно визуального редактора нод?',
+                options: [
+                  { id: 'open_editor_menu_a', text: 'Window -> Visual Scripting', isCorrect: false },
+                  { id: 'open_editor_menu_b', text: 'Assets -> Visual Scripting', isCorrect: false },
+                  { id: 'open_editor_menu_c', text: 'Tools -> Visual Scripting', isCorrect: true },
+                  { id: 'open_editor_menu_d', text: 'Edit -> Visual Scripting', isCorrect: false },
+                ],
+              },
+              {
+                id: 'ports_purpose',
+                question: 'Для чего служат порты (кружочки по бокам) у визуальных нод?',
+                options: [
+                  { id: 'ports_purpose_a', text: 'Для перемещения ноды по холсту', isCorrect: false },
+                  { id: 'ports_purpose_b', text: 'Для подключения связей между нодами, передающих данные или сигналы', isCorrect: true },
+                  { id: 'ports_purpose_c', text: 'Для изменения цвета ноды', isCorrect: false },
+                  { id: 'ports_purpose_d', text: 'Для закрытия ноды', isCorrect: false },
+                ],
+              },
+            ],
+            correctMessage: 'Верно.',
+            incorrectMessage: 'Неверно.',
+          },
+        },
     ],
     practice: [
       {
         type: 'Проверка',
-        text: 'Какое окно в Unity используется для изменения свойств конкретного объекта? Варианты: Scene, Hierarchy, Inspector, Console.',
+        text: 'Тест: «В каком окне Unity изменяются параметры выделенного объекта?»',
       },
       {
         type: 'Свободное',
-        text: 'Создать в сцене куб, сферу и источник света, покрасить их в разные цвета с помощью стандартных материалов.',
+        text: 'Создать на сцене куб, сферу и источник направленного света. Назначить каждому объекту материал с уникальным цветом.',
       },
     ],
   },
@@ -90,40 +270,41 @@ export const courseModules: ModuleItem[] = [
     lessons: [
       {
         id: 4,
-        title: 'Урок 2.1: Что такое скрипт и методы-инициаторы',
-        summary: 'Понятие компонента, роль скрипта и главные методы Unity: Start и Update.',
+        title: 'Урок 2.1: Компоненты и методы жизненного цикла',
+        summary: 'Скрипт как компонент и ключевые методы Unity: Awake, Start, Update и FixedUpdate.',
         duration: '13 мин',
         format: 'theory',
         theory: [
-          'Объясняем, что скрипт в Unity живет как компонент на объекте и связан с конкретным поведением.',
-          'Разбираем, когда движок вызывает Start и почему Update выполняется каждый кадр.',
-          'Показываем, как эта модель позже переносится в нодовое дерево внутри плагина.',
+          'В Unity скрипт работает как компонент, который добавляется к объекту и управляет его поведением.',
+          'Awake вызывается при создании объекта и часто используется для первичной настройки ссылок и внутренних данных.',
+          'Start выполняется перед первым кадром, когда сцена уже готова к началу логики.',
+          'Update вызывается каждый кадр и подходит для обработки ввода, а FixedUpdate работает с фиксированным интервалом и чаще применяется для физики.',
         ],
       },
       {
         id: 5,
-        title: 'Урок 2.2: Создание первого свойства (переменной)',
-        summary: 'Создаем свойство типа float для скорости через интерфейс плагина и объясняем хранение данных.',
+        title: 'Урок 2.2: Переменные (свойства)',
+        summary: 'Создание переменной типа float через интерфейс плагина и назначение значения по умолчанию.',
         duration: '11 мин',
         format: 'practice',
         theory: [
-          'Вводим понятие переменной как контейнера для данных, которые нужны логике объекта.',
-          'Создаем свойство скорости через интерфейс плагина и связываем это с базовыми типами данных.',
-          'Объясняем, почему без хранения состояния невозможно управлять поведением объекта в игре.',
+          'Переменная нужна для хранения данных, которые логика использует во время работы объекта.',
+          'Внутри плагина можно создать свойство типа float и задать ему стартовое значение прямо через интерфейс.',
+          'Значение по умолчанию помогает сразу определить начальное состояние логики до запуска игры.',
         ],
         task: 'Создайте свойство speed типа float и запишите пример значения, которое подойдет для плавного движения объекта вперед.',
         successHint: 'Нужно явно показать переменную speed и числовое значение типа 3, 5 или 7.5.',
       },
       {
         id: 6,
-        title: 'Урок 2.3: Выводим данные в мир',
-        summary: 'Подключаем свойство скорости к ноде движения внутри Update и наблюдаем поток данных по связям.',
+        title: 'Урок 2.3: Поток выполнения и поток данных',
+        summary: 'Разделяем execution flow и data flow и связываем переменную скорости с движением внутри Update.',
         duration: '16 мин',
         format: 'practice',
         theory: [
-          'Связываем переменную скорости с нодой движения и объясняем, как значение идет по проводам графа.',
-          'Разбираем роль Update как постоянного цикла применения логики к объекту.',
-          'Сопоставляем визуальные связи с тем, как потом выглядит похожая конструкция в коде.',
+          'Поток выполнения определяет, в каком порядке активируются узлы и какие действия запускаются.',
+          'Поток данных отвечает за передачу значений между узлами, например скорости, направления или ссылки на объект.',
+          'Когда переменная скорости подключается к узлу движения внутри Update, каждый кадр используется текущее значение speed для изменения положения объекта.',
         ],
         task: 'Опишите логику графа, в котором свойство speed передает значение в ноду движения внутри Update, чтобы объект двигался каждый кадр.',
         successHint: 'Нужно связать speed, Update и действие движения в одну последовательность.',
