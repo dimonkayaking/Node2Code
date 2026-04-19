@@ -77,7 +77,9 @@ const Landing: React.FC = () => {
       <section className="landing-hero">
         <div className="landing-hero__content">
           <span className="landing-badge">Плагин + встроенный курс для Unity</span>
-          <h1>Мост между визуальным программированием и кодом в Unity</h1>
+          <h1>
+            Мост между визуальным <span className="no-wrap">программированием</span> и кодом в Unity
+          </h1>
           <p className="landing-hero__lead">
             Платформа помогает работать с нодами и C# в обе стороны, а встроенный курс проводит
             пользователя от знакомства с интерфейсом Unity до анализа кода и практики со скриптами.
