@@ -211,7 +211,7 @@ export const courseModules: ModuleItem[] = [
             'Выберите Add package by name...',
             'Введите: com.unity.nuget.newtonsoft-json',
             'Нажмите Add',
-            'Откройте плагин: в меню Unity выберите Tools -> Visual Scripting',
+            'Откройте плагин: в меню Unity выберите Tools -> Node2Code',
           ],
           quiz: {
             questions: [
