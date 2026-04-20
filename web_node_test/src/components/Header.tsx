@@ -40,7 +40,6 @@ const Header: React.FC = () => {
             </>
           ) : (
             <>
-              <Link to="/plugin" onClick={hideMobileMenu}>Плагин</Link>
               <button className="icon-btn" onClick={toggleTheme} title="Переключить тему">💡</button>
               <Link to="/login" onClick={hideMobileMenu}>Войти</Link>
               <Link to="/register" className="btn-primary" onClick={hideMobileMenu}>Регистрация</Link>
