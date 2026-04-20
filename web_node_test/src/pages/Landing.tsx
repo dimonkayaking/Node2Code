@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAppContext } from '../context/AppContext';
 import './Landing.css';
 
 const advantages = [
@@ -72,6 +73,9 @@ const learningPath = [
 ];
 
 const Landing: React.FC = () => {
+  const { user } = useAppContext();
+  const learningCtaLink = user ? '/course' : '/register';
+
   return (
     <div className="landing-page">
       <section className="landing-hero">
@@ -86,10 +90,7 @@ const Landing: React.FC = () => {
           </p>
 
           <div className="landing-hero__actions">
-            <Link to="/plugin" className="landing-button landing-button--primary">
-              Скачать плагин
-            </Link>
-            <Link to="/course" className="landing-button landing-button--ghost">
+            <Link to={learningCtaLink} className="landing-button landing-button--primary">
               Начать обучение
             </Link>
           </div>
@@ -206,14 +207,6 @@ const Landing: React.FC = () => {
             </p>
           </div>
 
-          <div className="final-cta__actions">
-            <Link to="/plugin" className="landing-button landing-button--primary">
-              Перейти к плагину
-            </Link>
-            <Link to="/register" className="landing-button landing-button--ghost">
-              Создать аккаунт
-            </Link>
-          </div>
         </div>
       </section>
     </div>

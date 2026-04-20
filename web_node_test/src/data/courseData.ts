@@ -60,7 +60,7 @@ export const courseModules: ModuleItem[] = [
         summary: 'Загрузка Unity Hub, выбор версии редактора и создание первого 2D/3D проекта.',
         duration: '3 мин',
         format: 'theory',
-        videoUrl: '/videos/Lesson_1.1_video.mp4',
+        videoUrl: 'https://rutube.ru/play/embed/3b978fd326d9b0434ffc07509de92ea6',
         theory: [
           'Unity Hub нужен для установки редактора, управления версиями Unity и быстрого запуска проектов.',
           'Для обучения лучше выбирать стабильную версию: LTS или Unity 6, чтобы избежать лишних проблем совместимости.',
@@ -116,7 +116,7 @@ export const courseModules: ModuleItem[] = [
         summary: 'Назначение окон Scene, Hierarchy, Inspector и Project и их роль в ежедневной работе.',
         duration: '2 мин',
         format: 'theory',
-        videoUrl: '/videos/Lesson_1.2_video.mp4',
+        videoUrl: 'https://rutube.ru/play/embed/a5d73134a5e089301a5756816c750af9',
         theory: [
           'Scene - окно редактирования сцены: размещение, перемещение и изменение объектов в мире.',
           'Game - предварительный просмотр игры с точки зрения камеры, то есть то, что увидит игрок.',
@@ -211,7 +211,7 @@ export const courseModules: ModuleItem[] = [
             'Выберите Add package by name...',
             'Введите: com.unity.nuget.newtonsoft-json',
             'Нажмите Add',
-            'Откройте плагин: в меню Unity выберите Tools -> Visual Scripting',
+            'Откройте плагин: в меню Unity выберите Tools -> Node2Code',
           ],
           quiz: {
             questions: [

@@ -136,6 +136,23 @@
   background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
 }
 
+.video-placeholder a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  color: #dbeafe;
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  background: rgba(30, 41, 59, 0.6);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.video-placeholder a:hover {
+  background: rgba(37, 99, 235, 0.35);
+}
+
 .play-button {
   width: 72px;
   height: 72px;
