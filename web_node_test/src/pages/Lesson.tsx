@@ -6,7 +6,9 @@ import './Lesson.css';
 
 type VideoSource =
   | { kind: 'youtube'; url: string }
+  | { kind: 'embed'; url: string }
   | { kind: 'direct'; url: string }
+  | { kind: 'external'; url: string }
   | { kind: 'none'; url: null };
 
 const getVideoSource = (url?: string): VideoSource => {
@@ -40,6 +42,10 @@ const getVideoSource = (url?: string): VideoSource => {
         : { kind: 'none', url: null };
     }
 
+    if (hostname.includes('rutube.ru') && pathname.includes('/play/embed/')) {
+      return { kind: 'embed', url: normalizedUrl };
+    }
+
     const isDirectVideoLink =
       pathname.endsWith('.mp4') ||
       filename.endsWith('.mp4') ||
@@ -49,7 +55,7 @@ const getVideoSource = (url?: string): VideoSource => {
       return { kind: 'direct', url: normalizedUrl };
     }
 
-    return { kind: 'none', url: null };
+    return { kind: 'external', url: normalizedUrl };
   } catch {
     return { kind: 'none', url: null };
   }
@@ -98,6 +104,7 @@ const Lesson: React.FC = () => {
   const hasSidePanel = Boolean(lesson.task) || quizQuestions.length > 0;
   const isTheoryOnlyLesson = !hasSidePanel;
   const videoSource = getVideoSource(lesson.videoUrl);
+  const hasEmbeddedVideo = videoSource.kind === 'youtube' || videoSource.kind === 'direct' || videoSource.kind === 'embed';
   const quizStorageKey = getQuizStorageKey(user?.id);
 
   useEffect(() => {
@@ -226,7 +233,7 @@ const Lesson: React.FC = () => {
           </div>
 
           <div className="lesson-video">
-            <div className={`video-player ${videoSource.kind !== 'none' ? 'video-player--embedded' : ''}`}>
+            <div className={`video-player ${hasEmbeddedVideo ? 'video-player--embedded' : ''}`}>
               {videoSource.kind === 'youtube' && (
                 <iframe
                   className="video-embed"
@@ -234,6 +241,15 @@ const Lesson: React.FC = () => {
                   title={lesson.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              )}
+              {videoSource.kind === 'embed' && (
+                <iframe
+                  className="video-embed"
+                  src={videoSource.url}
+                  title={lesson.title}
+                  allow="clipboard-write; autoplay"
                   allowFullScreen
                 />
               )}
@@ -246,6 +262,15 @@ const Lesson: React.FC = () => {
                 <div className="video-placeholder">
                   <div className="play-button">▶</div>
                   <p>Здесь будет встроенное видео урока</p>
+                </div>
+              )}
+              {videoSource.kind === 'external' && (
+                <div className="video-placeholder">
+                  <div className="play-button">↗</div>
+                  <p>Видео доступно по внешней ссылке</p>
+                  <a href={videoSource.url} target="_blank" rel="noreferrer">
+                    Открыть видео урока
+                  </a>
                 </div>
               )}
             </div>
