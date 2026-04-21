@@ -12,7 +12,7 @@ namespace VisualScripting.Core.Generators
         private const string SubGraphVariableRefMarker = "__varref:";
         private Dictionary<string, NodeData> _map = new();
         private GraphData _graph = new();
-        private HashSet<string> _declared = new();
+        private Stack<HashSet<string>> _scopeStack = new();
         private HashSet<string> _emitted = new();
 
         public string GenerateCode(GraphData graph) => Generate(graph);
@@ -24,7 +24,8 @@ namespace VisualScripting.Core.Generators
 
             _graph = graph;
             _map = graph.Nodes.ToDictionary(n => n.Id);
-            _declared = new HashSet<string>();
+            _scopeStack = new Stack<HashSet<string>>();
+            PushScope();
             _emitted = new HashSet<string>();
 
             var hasIncomingExec = new HashSet<string>(
@@ -153,7 +154,7 @@ namespace VisualScripting.Core.Generators
                 
                 string type = GetKeywordForType(node.ValueType);
                 sb.AppendLine($"{type} {node.VariableName} = {valueExpr};");
-                _declared.Add(node.VariableName);
+                DeclareInCurrentScope(node.VariableName);
             }
             
             return sb.ToString().TrimEnd();
@@ -217,13 +218,13 @@ namespace VisualScripting.Core.Generators
             // Если есть ExpressionOverride — используем его
             if (!string.IsNullOrEmpty(node.ExpressionOverride))
             {
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {node.ExpressionOverride};");
                 else
                 {
                     string type = GetKeywordForType(node.ValueType);
                     sb.AppendLine($"{pad}{type} {vn} = {node.ExpressionOverride};");
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                 }
                 return;
             }
@@ -231,11 +232,11 @@ namespace VisualScripting.Core.Generators
             // Если есть литерал и нет входящей связи
             if (IsLiteral(node.Type) && !_graph.Edges.Any(e => e.ToNodeId == node.Id && e.ToPort == "inputValue"))
             {
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {LiteralRhs(node)};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(node.ValueType)} {vn} = {LiteralRhs(node)};");
                 }
                 return;
@@ -247,33 +248,33 @@ namespace VisualScripting.Core.Generators
             {
                 string valueExpr = GetExpressionForNode(sourceNode);
                 
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {valueExpr};");
                 else
                 {
                     string type = GetKeywordForType(node.ValueType);
                     sb.AppendLine($"{pad}{type} {vn} = {valueExpr};");
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                 }
             }
             else if (IsLiteral(node.Type))
             {
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {LiteralRhs(node)};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(node.ValueType)} {vn} = {LiteralRhs(node)};");
                 }
             }
             else if (IsBinaryOp(node.Type) && !string.IsNullOrEmpty(vn))
             {
                 var expr = EmitStmtExpr(node.Id);
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {expr};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(InferResultType(node))} {vn} = {expr};");
                 }
             }
@@ -281,35 +282,18 @@ namespace VisualScripting.Core.Generators
 
         private string GetExpressionForNode(NodeData node)
         {
-            if (node == null) return "???";
-            
+            if (node == null)
+                return "???";
+
+            if (!string.IsNullOrEmpty(node.VariableName))
+                return node.VariableName;
+
             if (IsLiteral(node.Type))
-            {
-                if (!string.IsNullOrEmpty(node.VariableName))
-                    return node.VariableName;
                 return LiteralRhs(node);
-            }
-            
-            if (IsMath(node.Type))
-            {
-                var leftEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputA");
-                var rightEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputB");
-                
-                if (leftEdge == null || rightEdge == null) return "???";
-                
-                var leftNode = _map.GetValueOrDefault(leftEdge.FromNodeId);
-                var rightNode = _map.GetValueOrDefault(rightEdge.FromNodeId);
-                
-                if (leftNode == null || rightNode == null) return "???";
-                
-                string leftExpr = GetExpressionForNode(leftNode);
-                string rightExpr = GetExpressionForNode(rightNode);
-                string op = MathOp(node.Type);
-                
-                return $"{leftExpr} {op} {rightExpr}";
-            }
-            
-            return "???";
+
+            // Централизованный путь генерации выражений:
+            // поддерживает math/compare/logical/parse/ToString/Mathf и т.д.
+            return EmitExpr(node.Id);
         }
 
         private void EmitIf(NodeData ifNode, StringBuilder sb, int indent, bool inline = false)
@@ -334,6 +318,7 @@ namespace VisualScripting.Core.Generators
                 sb.AppendLine($"{pad}if ({condExpr})");
 
             sb.AppendLine($"{pad}{{");
+            PushScope();
 
             if (ifNode.BodySubGraph != null && ifNode.BodySubGraph.Nodes.Count > 0)
             {
@@ -346,6 +331,7 @@ namespace VisualScripting.Core.Generators
                 if (trueEdge != null)
                     EmitChain(trueEdge.ToNodeId, sb, indent + 1);
             }
+            PopScope();
 
             sb.AppendLine($"{pad}}}");
 
@@ -363,6 +349,7 @@ namespace VisualScripting.Core.Generators
                 _emitted.Add(elseNode.Id);
                 sb.AppendLine($"{pad}else");
                 sb.AppendLine($"{pad}{{");
+                PushScope();
 
                 if (elseNode.BodySubGraph != null && elseNode.BodySubGraph.Nodes.Count > 0)
                 {
@@ -375,6 +362,7 @@ namespace VisualScripting.Core.Generators
                     if (bodyEdge != null)
                         EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
                 }
+                PopScope();
 
                 sb.AppendLine($"{pad}}}");
             }
@@ -501,6 +489,7 @@ namespace VisualScripting.Core.Generators
         private void EmitFor(NodeData forNode, StringBuilder sb, int indent)
         {
             var pad = Pad(indent);
+            PushScope();
             var initStr = EmitForInitClause(forNode);
             var condStr = "";
             if (forNode.ConditionSubGraph != null && forNode.ConditionSubGraph.Nodes.Count > 0)
@@ -528,6 +517,7 @@ namespace VisualScripting.Core.Generators
                     EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
             }
             sb.AppendLine($"{pad}}}");
+            PopScope();
         }
 
         private string GenerateForClauseFromSubGraph(GraphData subGraph)
@@ -588,6 +578,7 @@ namespace VisualScripting.Core.Generators
             }
             sb.AppendLine($"{pad}while ({condStr})");
             sb.AppendLine($"{pad}{{");
+            PushScope();
             if (whileNode.BodySubGraph != null && whileNode.BodySubGraph.Nodes.Count > 0)
             {
                 GenerateStatementsFromSubGraph(whileNode.BodySubGraph, sb, indent + 1);
@@ -599,7 +590,37 @@ namespace VisualScripting.Core.Generators
                 if (bodyEdge != null)
                     EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
             }
+            PopScope();
             sb.AppendLine($"{pad}}}");
+        }
+
+        private void PushScope() => _scopeStack.Push(new HashSet<string>());
+
+        private void PopScope()
+        {
+            if (_scopeStack.Count > 1)
+                _scopeStack.Pop();
+        }
+
+        private void DeclareInCurrentScope(string variableName)
+        {
+            if (string.IsNullOrEmpty(variableName))
+                return;
+            if (_scopeStack.Count == 0)
+                PushScope();
+            _scopeStack.Peek().Add(variableName);
+        }
+
+        private bool IsVisibleInAnyScope(string variableName)
+        {
+            if (string.IsNullOrEmpty(variableName))
+                return false;
+            foreach (var scope in _scopeStack)
+            {
+                if (scope.Contains(variableName))
+                    return true;
+            }
+            return false;
         }
 
         private void EmitConsoleWriteLine(NodeData node, StringBuilder sb, string pad)

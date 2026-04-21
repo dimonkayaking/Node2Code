@@ -56,6 +56,9 @@ namespace CustomVisualScripting.Windows.Views
                 }
             };
             _imguiEditor.AddToClassList("code-editor-imgui-container");
+            _imguiEditor.focusable = true;
+            _imguiEditor.RegisterCallback<KeyDownEvent>(OnTabSwallowBubbleUp);
+            _imguiEditor.RegisterCallback<KeyUpEvent>(OnTabKeyUpSwallowBubbleUp);
             Add(_imguiEditor);
 
             style.flexGrow = 1;
@@ -63,8 +66,114 @@ namespace CustomVisualScripting.Windows.Views
             style.marginLeft = 5;
             style.marginRight = 5;
 
+            RegisterCallback<KeyDownEvent>(OnTabSwallowBubbleUp);
+            RegisterCallback<KeyUpEvent>(OnTabKeyUpSwallowBubbleUp);
+            RegisterCallback<NavigationMoveEvent>(OnNavigationMoveTrickleDown, TrickleDown.TrickleDown);
+            RegisterCallback<NavigationSubmitEvent>(OnNavigationSubmitTrickleDown, TrickleDown.TrickleDown);
+
+            RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
+            RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
+
             RebuildLineMetadata();
         }
+
+        private void OnAttachToPanel(AttachToPanelEvent evt)
+        {
+            var root = panel?.visualTree;
+            if (root == null)
+                return;
+
+            root.RegisterCallback<KeyDownEvent>(OnRootKeyDownBubbleUp);
+            root.RegisterCallback<KeyUpEvent>(OnRootKeyUpBubbleUp);
+            root.RegisterCallback<NavigationMoveEvent>(OnRootNavigationMove, TrickleDown.TrickleDown);
+        }
+
+        private void OnDetachFromPanel(DetachFromPanelEvent evt)
+        {
+            var root = evt.originPanel?.visualTree;
+            if (root == null)
+                return;
+
+            root.UnregisterCallback<KeyDownEvent>(OnRootKeyDownBubbleUp);
+            root.UnregisterCallback<KeyUpEvent>(OnRootKeyUpBubbleUp);
+            root.UnregisterCallback<NavigationMoveEvent>(OnRootNavigationMove, TrickleDown.TrickleDown);
+        }
+
+        private bool IsCodeEditorFocused()
+        {
+            if (panel == null)
+                return false;
+            var focused = panel.focusController?.focusedElement as VisualElement;
+            if (focused == null)
+                return false;
+            // Фокус принадлежит нам, если сам IMGUI-контейнер или его предок — этот вью.
+            return focused == _imguiEditor || focused == this ||
+                   (focused is VisualElement ve && ve.FindCommonAncestor(_imguiEditor) == _imguiEditor);
+        }
+
+        private void OnRootKeyDownBubbleUp(KeyDownEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            SwallowIfTab(evt);
+        }
+
+        private void OnRootKeyUpBubbleUp(KeyUpEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            SwallowIfTab(evt);
+        }
+
+        private void OnRootNavigationMove(NavigationMoveEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            evt.StopPropagation();
+        }
+
+        private void OnTabSwallowBubbleUp(KeyDownEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            SwallowIfTab(evt);
+        }
+
+        private void OnTabKeyUpSwallowBubbleUp(KeyUpEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            SwallowIfTab(evt);
+        }
+        // Блокируем tab-навигацию UI Toolkit после обработки IMGUI-полем,
+        // чтобы Tab успевал вставить 4 пробела через HandleTabIndentIfNeeded.
+        private static void SwallowIfTab(KeyDownEvent evt)
+        {
+            if (evt.keyCode != KeyCode.Tab && evt.character != '\t')
+                return;
+            evt.StopImmediatePropagation();
+            evt.StopPropagation();
+        }
+
+        private static void SwallowIfTab(KeyUpEvent evt)
+        {
+            if (evt.keyCode != KeyCode.Tab && evt.character != '\t')
+                return;
+            evt.StopImmediatePropagation();
+            evt.StopPropagation();
+        }
+
+
+        private void OnNavigationMoveTrickleDown(NavigationMoveEvent evt)
+        {
+            evt.StopPropagation();
+        }
+
+        private void OnNavigationSubmitTrickleDown(NavigationSubmitEvent evt)
+        {
+            evt.StopPropagation();
+        }
+
 
         public new void Clear()
         {
@@ -147,6 +256,7 @@ namespace CustomVisualScripting.Windows.Views
             EditorGUIUtility.AddCursorRect(codeRect, MouseCursor.Text);
             GUI.SetNextControlName(CodeControlName);
             string next = GUI.TextArea(codeRect, _code, _codeStyle);
+            HandleTabIndentIfNeeded(ref next);
             bool textChangedThisFrame = false;
             if (!string.Equals(next, _code))
             {
@@ -156,6 +266,34 @@ namespace CustomVisualScripting.Windows.Views
             }
 
             EnsureCaretVisible(codeRect, viewportRect, lineHeight, textChangedThisFrame);
+        }
+
+        private static void HandleTabIndentIfNeeded(ref string text)
+        {
+            var evt = Event.current;
+            if (evt == null || evt.type != EventType.KeyDown || evt.keyCode != KeyCode.Tab || evt.shift)
+                return;
+            if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName, System.StringComparison.Ordinal))
+                return;
+
+            var editor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
+            if (editor == null)
+                return;
+
+            int start = Mathf.Clamp(Mathf.Min(editor.cursorIndex, editor.selectIndex), 0, text?.Length ?? 0);
+            int end = Mathf.Clamp(Mathf.Max(editor.cursorIndex, editor.selectIndex), 0, text?.Length ?? 0);
+            text ??= string.Empty;
+            const string indent = "    ";
+
+            if (end > start)
+                text = text.Remove(start, end - start).Insert(start, indent);
+            else
+                text = text.Insert(start, indent);
+
+            editor.cursorIndex = start + indent.Length;
+            editor.selectIndex = editor.cursorIndex;
+            evt.Use();
+            GUI.changed = true;
         }
 
         private void EnsureStyles()

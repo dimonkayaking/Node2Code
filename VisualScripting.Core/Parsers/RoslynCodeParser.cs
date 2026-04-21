@@ -27,8 +27,76 @@ namespace VisualScripting.Core.Parsers
         private int _nodeCounter;
         private GraphData _graph = null!;
         private List<string> _errors = null!;
-        private readonly Dictionary<string, string> _symbolToNodeId = new Dictionary<string, string>();
-        private readonly Dictionary<string, string> _variableTypes = new Dictionary<string, string>();
+
+        // Таблицы символов и типов переменных на стеке областей видимости.
+        // Top стека — самая внутренняя область. Позволяет корректно объявлять
+        // одно и то же имя в разных if/for/while-блоках без ложных ошибок
+        // "повторного объявления".
+        private readonly Stack<Dictionary<string, string>> _symbolScopes = new Stack<Dictionary<string, string>>();
+        private readonly Stack<Dictionary<string, string>> _typeScopes = new Stack<Dictionary<string, string>>();
+
+        private void PushVarScope()
+        {
+            _symbolScopes.Push(new Dictionary<string, string>());
+            _typeScopes.Push(new Dictionary<string, string>());
+        }
+
+        private void PopVarScope()
+        {
+            if (_symbolScopes.Count > 1) _symbolScopes.Pop();
+            if (_typeScopes.Count > 1) _typeScopes.Pop();
+        }
+
+        private bool SymbolVisible(string name)
+        {
+            foreach (var scope in _symbolScopes)
+                if (scope.ContainsKey(name)) return true;
+            return false;
+        }
+
+        private bool TryGetSymbol(string name, out string nodeId)
+        {
+            foreach (var scope in _symbolScopes)
+                if (scope.TryGetValue(name, out nodeId!)) return true;
+            nodeId = null!;
+            return false;
+        }
+
+        private void SetSymbol(string name, string nodeId)
+        {
+            foreach (var scope in _symbolScopes)
+            {
+                if (scope.ContainsKey(name))
+                {
+                    scope[name] = nodeId;
+                    return;
+                }
+            }
+            if (_symbolScopes.Count == 0) PushVarScope();
+            _symbolScopes.Peek()[name] = nodeId;
+        }
+
+        private bool TryGetVariableType(string name, out string type)
+        {
+            foreach (var scope in _typeScopes)
+                if (scope.TryGetValue(name, out type!)) return true;
+            type = null!;
+            return false;
+        }
+
+        private void SetVariableType(string name, string type)
+        {
+            foreach (var scope in _typeScopes)
+            {
+                if (scope.ContainsKey(name))
+                {
+                    scope[name] = type;
+                    return;
+                }
+            }
+            if (_typeScopes.Count == 0) PushVarScope();
+            _typeScopes.Peek()[name] = type;
+        }
 
         private bool _inSubGraph;
         private readonly Stack<GraphData> _graphStack = new Stack<GraphData>();
@@ -40,8 +108,9 @@ namespace VisualScripting.Core.Parsers
             _nodeCounter = 0;
             _graph = new GraphData();
             _errors = new List<string>();
-            _symbolToNodeId.Clear();
-            _variableTypes.Clear();
+            _symbolScopes.Clear();
+            _typeScopes.Clear();
+            PushVarScope();
             _inSubGraph = false;
             _graphStack.Clear();
             _varRefStack.Clear();
@@ -209,7 +278,7 @@ namespace VisualScripting.Core.Parsers
             {
                 var name = v.Identifier.Text;
 
-                if (_symbolToNodeId.ContainsKey(name))
+                if (SymbolVisible(name))
                 {
                     _errors.Add(
                         $"Повторное объявление переменной «{name}» ({FormatUserLocation(local.SyntaxTree, v.Identifier.Span)}).");
@@ -224,12 +293,12 @@ namespace VisualScripting.Core.Parsers
                     "string" => "string",
                     _ => "int"
                 };
-                _variableTypes[name] = vType;
+                _typeScopes.Peek()[name] = vType;
 
                 if (v.Initializer == null)
                 {
                     var declId = CreateDefaultLiteralNode(vType, name);
-                    _symbolToNodeId[name] = declId;
+                    _symbolScopes.Peek()[name] = declId;
 
                     var declHost = new FlowHost { NodeId = declId };
                     if (last != null)
@@ -270,7 +339,7 @@ namespace VisualScripting.Core.Parsers
                     }
                 }
 
-                _symbolToNodeId[name] = litId;
+                _symbolScopes.Peek()[name] = litId;
 
                 var host = new FlowHost { NodeId = litId };
                 if (last != null)
@@ -314,7 +383,7 @@ namespace VisualScripting.Core.Parsers
                     }
                     else
                     {
-                        var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+                        var vType = TryGetVariableType(name, out var t) ? t : "int";
                         litId = CreateDefaultLiteralNode(vType, name);
                         AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
                         var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
@@ -322,7 +391,7 @@ namespace VisualScripting.Core.Parsers
                             litNode.ExpressionOverride = assign.Right.ToString().Trim();
                     }
 
-                    _symbolToNodeId[name] = litId;
+                    SetSymbol(name, litId);
 
                     var host = new FlowHost { NodeId = litId };
                     if (prevNode != null)
@@ -500,11 +569,11 @@ namespace VisualScripting.Core.Parsers
             }
 
             string leftId;
-            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            if (_inSubGraph && SymbolVisible(name))
             {
                 leftId = CreateVariableRefInSubGraph(name);
             }
-            else if (!_symbolToNodeId.TryGetValue(name, out var tempLeft))
+            else if (!TryGetSymbol(name, out var tempLeft))
             {
                 _errors.Add(
                     $"Неизвестная переменная «{name}» ({FormatUserLocation(assign.SyntaxTree, assign.Span)}).");
@@ -531,11 +600,11 @@ namespace VisualScripting.Core.Parsers
             AddEdge(leftId, GetDataOutPortForNodeId(leftId), opId, "inputA");
             AddEdge(rightId, GetDataOutPortForNodeId(rightId), opId, "inputB");
 
-            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var vType = TryGetVariableType(name, out var t) ? t : "int";
             var litId = CreateDefaultLiteralNode(vType, name);
-            
+
             AddEdge(opId, "output", litId, "inputValue");
-            _symbolToNodeId[name] = litId;
+            SetSymbol(name, litId);
 
             var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
@@ -551,11 +620,11 @@ namespace VisualScripting.Core.Parsers
         {
             var name = idExpr.Identifier.Text;
             string varNodeId;
-            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            if (_inSubGraph && SymbolVisible(name))
             {
                 varNodeId = CreateVariableRefInSubGraph(name);
             }
-            else if (!_symbolToNodeId.TryGetValue(name, out var tempVar))
+            else if (!TryGetSymbol(name, out var tempVar))
             {
                 _errors.Add(
                     $"Неизвестная переменная «{name}» ({FormatUserLocation(idExpr.SyntaxTree, idExpr.Span)}).");
@@ -580,11 +649,11 @@ namespace VisualScripting.Core.Parsers
             AddEdge(varNodeId, GetDataOutPortForNodeId(varNodeId), opId, "inputA");
             AddEdge(oneId, "output", opId, "inputB");
 
-            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var vType = TryGetVariableType(name, out var t) ? t : "int";
             var litId = CreateDefaultLiteralNode(vType, name);
-            
+
             AddEdge(opId, "output", litId, "inputValue");
-            _symbolToNodeId[name] = litId;
+            SetSymbol(name, litId);
 
             var host = new FlowHost { NodeId = litId };
             if (prevNode != null)
@@ -606,6 +675,11 @@ namespace VisualScripting.Core.Parsers
 
             if (prevNode != null)
                 AddEdge(prevNode, prevPort, forId, "execIn");
+
+            // for создаёт новую область видимости, покрывающую init/cond/inc/body:
+            // переменная цикла из init должна быть видна в condition, increment и теле,
+            // но не после выхода из for.
+            PushVarScope();
 
             var initGraph = new GraphData();
             PushSubGraph(initGraph);
@@ -638,6 +712,8 @@ namespace VisualScripting.Core.Parsers
             PopSubGraph();
             forNodeData.BodySubGraph = bodyGraph;
 
+            PopVarScope();
+
             _graph.Nodes.Add(forNodeData);
 
             return new FlowHost { NodeId = forId, ExecOutPort = "execOut" };
@@ -650,12 +726,22 @@ namespace VisualScripting.Core.Parsers
                 foreach (var v in forStmt.Declaration.Variables)
                 {
                     var name = v.Identifier.Text;
-                    if (_symbolToNodeId.ContainsKey(name))
+                    if (SymbolVisible(name))
                     {
                         _errors.Add(
                             $"Повторное объявление переменной «{name}» ({FormatUserLocation(forStmt.SyntaxTree, v.Identifier.Span)}).");
                         continue;
                     }
+
+                    var typeStr = forStmt.Declaration.Type.ToString().Trim();
+                    var vType0 = typeStr switch
+                    {
+                        "float" => "float",
+                        "bool" => "bool",
+                        "string" => "string",
+                        _ => "int"
+                    };
+                    _typeScopes.Peek()[name] = vType0;
 
                     if (v.Initializer == null)
                         continue;
@@ -664,7 +750,7 @@ namespace VisualScripting.Core.Parsers
                     if (unsupported || rootId == null)
                         continue;
 
-                    _symbolToNodeId[name] = rootId;
+                    _symbolScopes.Peek()[name] = rootId;
                 }
             }
 
@@ -687,12 +773,12 @@ namespace VisualScripting.Core.Parsers
                     }
                     else
                     {
-                        var vType = _variableTypes.TryGetValue(n, out var t) ? t : "int";
+                        var vType = TryGetVariableType(n, out var t) ? t : "int";
                         litId = CreateDefaultLiteralNode(vType, n);
                         AddEdge(rootId, GetDataOutPortForNodeId(rootId), litId, "inputValue");
                     }
-                    
-                    _symbolToNodeId[n] = litId;
+
+                    SetSymbol(n, litId);
                     continue;
                 }
 
@@ -736,11 +822,11 @@ namespace VisualScripting.Core.Parsers
             var name = id.Identifier.Text;
             
             string varNodeId;
-            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            if (_inSubGraph && SymbolVisible(name))
             {
                 varNodeId = CreateVariableRefInSubGraph(name);
             }
-            else if (!_symbolToNodeId.TryGetValue(name, out var temp))
+            else if (!TryGetSymbol(name, out var temp))
             {
                 unsupported = true;
                 _errors.Add(
@@ -766,14 +852,14 @@ namespace VisualScripting.Core.Parsers
             AddEdge(varNodeId, GetDataOutPortForNodeId(varNodeId), opId, "inputA");
             AddEdge(oneId, "output", opId, "inputB");
 
-            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var vType = TryGetVariableType(name, out var t) ? t : "int";
             var litId = CreateDefaultLiteralNode(vType, name);
             var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
             if (litNode != null)
                 litNode.Value = "?";
-            
+
             AddEdge(opId, "output", litId, "inputValue");
-            _symbolToNodeId[name] = litId;
+            SetSymbol(name, litId);
 
             return opId;
         }
@@ -788,7 +874,7 @@ namespace VisualScripting.Core.Parsers
             }
 
             var name = idLeft.Identifier.Text;
-            if (!_symbolToNodeId.ContainsKey(name))
+            if (!SymbolVisible(name))
             {
                 unsupported = true;
                 _errors.Add(
@@ -800,14 +886,14 @@ namespace VisualScripting.Core.Parsers
             if (unsupported || rhsId == null)
                 return null;
 
-            var vType = _variableTypes.TryGetValue(name, out var t) ? t : "int";
+            var vType = TryGetVariableType(name, out var t) ? t : "int";
             var litId = CreateDefaultLiteralNode(vType, name);
             var litNode = _graph.Nodes.FirstOrDefault(n => n.Id == litId);
             if (litNode != null)
                 litNode.Value = "?";
 
             AddEdge(rhsId, GetDataOutPortForNodeId(rhsId), litId, "inputValue");
-            _symbolToNodeId[name] = litId;
+            SetSymbol(name, litId);
             return litId;
         }
 
@@ -834,8 +920,10 @@ namespace VisualScripting.Core.Parsers
 
             var bodyGraph = new GraphData();
             PushSubGraph(bodyGraph);
+            PushVarScope();
             var bodyStmts = ExpandStatement(whileStmt.Statement);
             BuildStatementsInSubGraph(bodyStmts);
+            PopVarScope();
             PopSubGraph();
             whileNodeData.BodySubGraph = bodyGraph;
 
@@ -864,8 +952,10 @@ namespace VisualScripting.Core.Parsers
 
             var bodyGraph = new GraphData();
             PushSubGraph(bodyGraph);
+            PushVarScope();
             var thenStmts = ExpandStatement(stmt.Statement);
             BuildStatementsInSubGraph(thenStmts);
+            PopVarScope();
             PopSubGraph();
             ifNodeData.BodySubGraph = bodyGraph;
 
@@ -894,8 +984,10 @@ namespace VisualScripting.Core.Parsers
 
                     var elseBodyGraph = new GraphData();
                     PushSubGraph(elseBodyGraph);
+                    PushVarScope();
                     var elseStmts = ExpandStatement(stmt.Else.Statement);
                     BuildStatementsInSubGraph(elseStmts);
+                    PopVarScope();
                     PopSubGraph();
                     elseNodeData.BodySubGraph = elseBodyGraph;
 
@@ -976,7 +1068,7 @@ namespace VisualScripting.Core.Parsers
             if (_subGraphVarRefs != null && _subGraphVarRefs.TryGetValue(varName, out var existing))
                 return existing;
 
-            var vType = _variableTypes.TryGetValue(varName, out var t) ? t : "int";
+            var vType = TryGetVariableType(varName, out var t) ? t : "int";
             NodeType litType = vType switch
             {
                 "float" => NodeType.LiteralFloat,
@@ -1624,10 +1716,10 @@ namespace VisualScripting.Core.Parsers
             unsupported = false;
             var name = id.Identifier.Text;
 
-            if (_inSubGraph && _symbolToNodeId.ContainsKey(name))
+            if (_inSubGraph && SymbolVisible(name))
                 return CreateVariableRefInSubGraph(name);
 
-            if (_symbolToNodeId.TryGetValue(name, out var nodeId))
+            if (TryGetSymbol(name, out var nodeId))
                 return nodeId;
 
             unsupported = true;

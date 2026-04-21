@@ -886,4 +886,73 @@ Console.WriteLine(message);";
         var msgEdge = result.Graph.Edges.FirstOrDefault(e => e.ToNodeId == cwlNode!.Id && e.ToPort == "message");
         Assert.NotNull(msgEdge);
     }
+
+    [Fact]
+    public void SiblingIfBlocksDoNotShareVariableScope()
+    {
+        // Два независимых if-блока объявляют локальную x каждый в своей области
+        // видимости — не должно быть re-declaration и не должно быть
+        // "просто присваивания" во втором if.
+        var code = @"
+bool a = true;
+bool b = false;
+if (a)
+{
+    int x = 1;
+}
+if (b)
+{
+    int x = 2;
+}";
+        var output = Roundtrip(code);
+
+        // Оба if должны содержать полноценное объявление с типом.
+        var withTypeCount = System.Text.RegularExpressions.Regex.Matches(output, @"\bint\s+x\s*=\s*\d+\s*;").Count;
+        Assert.True(withTypeCount >= 2,
+            $"Expected two independent 'int x = ...;' declarations, got:\n{output}");
+
+        // Не должно быть строки вида "x = 2;" без типа — это указывало бы на
+        // ошибочное переиспользование области видимости.
+        Assert.DoesNotMatch(
+            new System.Text.RegularExpressions.Regex(@"(?<!int\s)\bx\s*=\s*2\s*;"),
+            output);
+    }
+
+    [Fact]
+    public void SiblingForBlocksDoNotShareVariableScope()
+    {
+        var code = @"
+for (int i = 0; i < 3; i = i + 1)
+{
+    int k = 10;
+}
+for (int j = 0; j < 2; j = j + 1)
+{
+    int k = 20;
+}";
+        var output = Roundtrip(code);
+
+        var withTypeCount = System.Text.RegularExpressions.Regex.Matches(output, @"\bint\s+k\s*=\s*\d+\s*;").Count;
+        Assert.True(withTypeCount >= 2,
+            $"Expected two independent 'int k = ...;' declarations, got:\n{output}");
+    }
+
+    [Fact]
+    public void InnerIfCanDeclareVariableAfterSiblingIfPopsScope()
+    {
+        var code = @"
+bool a = true;
+if (a)
+{
+    int x = 1;
+}
+else
+{
+    int x = 2;
+}";
+        var output = Roundtrip(code);
+
+        Assert.Contains("int x = 1;", output);
+        Assert.Contains("int x = 2;", output);
+    }
 }

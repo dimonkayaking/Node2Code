@@ -10,8 +10,37 @@ namespace VisualScripting.Core.Generators
     {
         private Dictionary<string, NodeData> _map = new();
         private GraphData _graph = new();
-        private HashSet<string> _declared = new();
+        private Stack<HashSet<string>> _scopeStack = new();
         private HashSet<string> _emitted = new();
+
+        private void PushScope() => _scopeStack.Push(new HashSet<string>());
+
+        private void PopScope()
+        {
+            if (_scopeStack.Count > 1)
+                _scopeStack.Pop();
+        }
+
+        private void DeclareInCurrentScope(string variableName)
+        {
+            if (string.IsNullOrEmpty(variableName))
+                return;
+            if (_scopeStack.Count == 0)
+                PushScope();
+            _scopeStack.Peek().Add(variableName);
+        }
+
+        private bool IsVisibleInAnyScope(string variableName)
+        {
+            if (string.IsNullOrEmpty(variableName))
+                return false;
+            foreach (var scope in _scopeStack)
+            {
+                if (scope.Contains(variableName))
+                    return true;
+            }
+            return false;
+        }
 
         public string GenerateCode(GraphData graph) => Generate(graph);
 
@@ -22,7 +51,8 @@ namespace VisualScripting.Core.Generators
 
             _graph = graph;
             _map = graph.Nodes.ToDictionary(n => n.Id);
-            _declared = new HashSet<string>();
+            _scopeStack = new Stack<HashSet<string>>();
+            PushScope();
             _emitted = new HashSet<string>();
 
             var hasIncomingExec = new HashSet<string>(
@@ -54,13 +84,13 @@ namespace VisualScripting.Core.Generators
                     var valueEdge = _graph.Edges.FirstOrDefault(e => e.ToNodeId == node.Id && e.ToPort == "inputValue");
                     string rhs = valueEdge != null ? EmitCondExpr(valueEdge.FromNodeId) : LiteralRhs(node);
                     sb.AppendLine($"{KeywordFor(node.ValueType)} {node.VariableName} = {rhs};");
-                    _declared.Add(node.VariableName);
+                    DeclareInCurrentScope(node.VariableName);
                 }
                 else if (IsBinaryOp(node.Type) && !string.IsNullOrEmpty(node.VariableName))
                 {
                     var type = InferResultType(node);
                     sb.AppendLine($"{KeywordFor(type)} {node.VariableName} = {EmitStmtExpr(node.Id)};");
-                    _declared.Add(node.VariableName);
+                    DeclareInCurrentScope(node.VariableName);
                 }
             }
             return sb.ToString().TrimEnd();
@@ -125,11 +155,11 @@ namespace VisualScripting.Core.Generators
                 else
                     rhs = LiteralRhs(node);
 
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {rhs};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(node.ValueType)} {vn} = {rhs};");
                 }
                 return;
@@ -138,11 +168,11 @@ namespace VisualScripting.Core.Generators
             if (IsBinaryOp(node.Type) || node.Type == NodeType.LogicalNot)
             {
                 var expr = EmitStmtExpr(node.Id);
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {expr};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(InferResultType(node))} {vn} = {expr};");
                 }
                 return;
@@ -151,11 +181,11 @@ namespace VisualScripting.Core.Generators
             if (IsBuiltinExpressionNode(node.Type))
             {
                 var expr = EmitStmtExpr(node.Id);
-                if (_declared.Contains(vn))
+                if (IsVisibleInAnyScope(vn))
                     sb.AppendLine($"{pad}{vn} = {expr};");
                 else
                 {
-                    _declared.Add(vn);
+                    DeclareInCurrentScope(vn);
                     sb.AppendLine($"{pad}{KeywordFor(InferResultType(node))} {vn} = {expr};");
                 }
             }
@@ -183,6 +213,7 @@ namespace VisualScripting.Core.Generators
                 sb.AppendLine($"{pad}if ({condExpr})");
 
             sb.AppendLine($"{pad}{{");
+            PushScope();
 
             if (ifNode.BodySubGraph != null && ifNode.BodySubGraph.Nodes.Count > 0)
             {
@@ -195,6 +226,7 @@ namespace VisualScripting.Core.Generators
                 if (trueEdge != null)
                     EmitChain(trueEdge.ToNodeId, sb, indent + 1);
             }
+            PopScope();
 
             sb.AppendLine($"{pad}}}");
 
@@ -212,6 +244,7 @@ namespace VisualScripting.Core.Generators
                 _emitted.Add(target.Id);
                 sb.AppendLine($"{pad}else");
                 sb.AppendLine($"{pad}{{");
+                PushScope();
 
                 if (target.BodySubGraph != null && target.BodySubGraph.Nodes.Count > 0)
                 {
@@ -224,6 +257,7 @@ namespace VisualScripting.Core.Generators
                     if (bodyEdge != null)
                         EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
                 }
+                PopScope();
 
                 sb.AppendLine($"{pad}}}");
             }
@@ -366,6 +400,7 @@ namespace VisualScripting.Core.Generators
             var incStr = EmitForIncrementClause(forNode.Id);
             sb.AppendLine($"{pad}for ({initStr}; {condStr}; {incStr})");
             sb.AppendLine($"{pad}{{");
+            PushScope();
             if (forNode.BodySubGraph != null && forNode.BodySubGraph.Nodes.Count > 0)
             {
                 GenerateStatementsFromSubGraph(forNode.BodySubGraph, sb, indent + 1);
@@ -377,6 +412,7 @@ namespace VisualScripting.Core.Generators
                 if (bodyEdge != null)
                     EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
             }
+            PopScope();
             sb.AppendLine($"{pad}}}");
         }
 
@@ -453,6 +489,7 @@ namespace VisualScripting.Core.Generators
 
             sb.AppendLine($"{pad}while ({condStr})");
             sb.AppendLine($"{pad}{{");
+            PushScope();
             if (whileNode.BodySubGraph != null && whileNode.BodySubGraph.Nodes.Count > 0)
             {
                 GenerateStatementsFromSubGraph(whileNode.BodySubGraph, sb, indent + 1);
@@ -464,6 +501,7 @@ namespace VisualScripting.Core.Generators
                 if (bodyEdge != null)
                     EmitChain(bodyEdge.ToNodeId, sb, indent + 1);
             }
+            PopScope();
             sb.AppendLine($"{pad}}}");
         }
 
