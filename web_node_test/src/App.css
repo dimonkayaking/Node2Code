@@ -15,17 +15,17 @@ body {
 
 body.light {
   background: #f8fafc;
-  color: #0f172a;
+  color: #0b1324;
 }
 
 body.dark {
-  background: #04060c;
+  background: #0b1324;
   color: #f8fafc;
   filter: none;
 }
 
 body.dark .main-layout {
-  background: #05070f;
+  background: #0b1324;
 }
 
 body.dark .site-header,
@@ -78,17 +78,17 @@ body.dark .generate-key-btn {
 }
 
 body.dark .main-layout {
-  background: #0b1226;
+  background: #0b1324;
 }
 
 
 .App .main-layout {
-  padding-top: 60px;
+  padding-top: 0px;
   min-height: calc(100vh - 120px);
 }
 
 body.dark .main-layout {
-  background: #111827;
+  background: #0b1324;
 }
 
 body.light .main-layout {
@@ -111,7 +111,7 @@ body.dark .site-footer a {
 }
 
 .main-layout {
-  padding-top: 60px;
+  padding-top: 0px;
   min-height: calc(100vh - 120px);
 }
 

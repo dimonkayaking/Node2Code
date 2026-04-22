@@ -1,7 +1,7 @@
 ﻿.plugin-page {
   max-width: 1240px;
-  margin: 90px auto 40px;
-  padding: 0 1rem;
+  margin: 0 auto 0;
+  padding: 40px 0 40px;
   display: grid;
   gap: 1.5rem;
 }
@@ -57,7 +57,7 @@
   font-size: clamp(2rem, 4vw, 3.5rem);
   line-height: 1.04;
   letter-spacing: -0.035em;
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .plugin-hero p,
@@ -109,7 +109,7 @@
 .install-tile strong,
 .doc-link strong,
 .plugin-panel__label {
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .plugin-hero__stats strong {
@@ -146,7 +146,7 @@
   border-radius: 16px;
   font-weight: 700;
   background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .plugin-node--accent {
@@ -173,7 +173,7 @@
   word-break: break-word;
   overflow-wrap: anywhere;
   background: rgba(255, 255, 255, 0.96);
-  color: #0f172a;
+  color: #0b1324;
   border: 1px solid rgba(148, 163, 184, 0.22);
   line-height: 1.7;
 }
@@ -410,7 +410,7 @@ body.dark .plugin-node--success {
 }
 
 body.dark .plugin-panel--code pre {
-  background: #0f172a;
+  background: #0b1324;
   color: #dbeafe;
   border-color: rgba(71, 85, 105, 0.38);
 }

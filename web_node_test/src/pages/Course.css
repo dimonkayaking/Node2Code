@@ -1,7 +1,7 @@
 ﻿.course-page {
   max-width: 1240px;
-  margin: 90px auto 40px;
-  padding: 0 1rem;
+  margin: 0 auto 0;
+  padding: 40px 0 40px;
 }
 
 .course-hero {
@@ -27,7 +27,7 @@
   margin: 0.9rem 0;
   font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.08;
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .course-hero p,
@@ -56,7 +56,7 @@
 
 .course-overview-card strong {
   font-size: 1.8rem;
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .course-overview-card span {
@@ -76,7 +76,7 @@
 
 .course-summary-card h2 {
   margin-bottom: 0.7rem;
-  color: #0f172a;
+  color: #0b1324;
 }
 
 .topic-grid {
@@ -100,7 +100,7 @@
 }
 
 .topic-card h3 {
-  color: #0f172a;
+  color: #0b1324;
   font-size: 1.35rem;
 }
 

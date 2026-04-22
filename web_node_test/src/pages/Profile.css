@@ -1,11 +1,11 @@
 .profile-page {
   max-width: 1000px;
-  margin: 90px auto 40px;
-  padding: 0 1rem;
+  margin: 0 auto 0;
+  padding: 40px 0 40px;
 }
 
 .profile-page h1 {
-  color: #1f2937;
+  color: #0b1324;
   margin-bottom: 1.2rem;
 }
 
@@ -29,7 +29,7 @@
 
 .profile-card h2 {
   margin-top: 0;
-  color: #1f2937;
+  color: #0b1324;
 }
 
 .profile-card p {
@@ -129,7 +129,7 @@ body.dark .profile-notice {
 }
 
 body.dark .change-password-form input {
-  background: #0b1220;
+  background: #0b1324;
   color: #f8fafc;
   border-color: #334155;
 }
@@ -148,7 +148,7 @@ body.dark .change-password-form button {
 }
 
 body.dark .progress-line {
-  background: #1e293b;
+  background: #0b1324;
 }
 
 body.dark .status-msg {
