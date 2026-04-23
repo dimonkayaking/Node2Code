@@ -1,6 +1,6 @@
 ﻿.course-page {
   max-width: 1240px;
-  margin: 90px auto 40px;
+  margin: 0 auto 40px;
   padding: 0 1rem;
 }
 
@@ -32,7 +32,6 @@
 
 .course-hero p,
 .course-summary-card p,
-.topic-goal,
 .topic-preview-list li {
   color: #475569;
   line-height: 1.7;
@@ -156,7 +155,6 @@ body.dark .course-overview-card strong {
 
 body.dark .course-hero p,
 body.dark .course-summary-card p,
-body.dark .topic-goal,
 body.dark .topic-meta,
 body.dark .topic-preview-list li,
 body.dark .course-overview-card span {
@@ -204,7 +202,6 @@ body.dark .progress-line {
 .course-summary-card h2,
 .course-summary-card p,
 .topic-card h3,
-.topic-goal,
 .topic-meta,
 .topic-preview-list li,
 .topic-btn {

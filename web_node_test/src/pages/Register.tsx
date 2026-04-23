@@ -63,7 +63,7 @@ const Register: React.FC = () => {
         email: sanitizedEmail,
         password,
       });
-      navigate('/course');
+      navigate('/instructions');
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors((error.fields as Partial<Record<keyof RegisterFormValues, string>>) || {});

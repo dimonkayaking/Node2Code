@@ -199,7 +199,7 @@ const Lesson: React.FC = () => {
         return;
       }
 
-      navigate('/course');
+      navigate('/instructions');
     } finally {
       setIsSavingProgress(false);
     }
@@ -211,7 +211,7 @@ const Lesson: React.FC = () => {
       return;
     }
 
-    navigate('/course');
+    navigate('/instructions');
   };
 
   return (
@@ -305,7 +305,7 @@ const Lesson: React.FC = () => {
 
           {lesson.format === 'theory' && (
             <button className="next-lesson-btn" onClick={() => void goToNextLesson()} disabled={isSavingProgress}>
-              {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
+              {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к инструкции'}
             </button>
           )}
         </div>
@@ -386,7 +386,7 @@ const Lesson: React.FC = () => {
 
                 {taskSolved && (
                   <button className="next-lesson-btn" onClick={() => void goToNextLesson()} disabled={isSavingProgress}>
-                    {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к курсу'}
+                    {isSavingProgress ? 'Сохраняем...' : nextLessonId ? 'Следующий урок' : 'Вернуться к инструкции'}
                   </button>
                 )}
                 </>

@@ -13,12 +13,8 @@ const Course: React.FC = () => {
     <section className="course-page">
       <div className="course-hero">
         <div>
-          <span className="course-eyebrow">Полная программа курса</span>
-          <h1>От визуальной логики к коду: Основы Unity</h1>
-          <p>
-            Курс полностью повторяет план обучения: 8 модулей, 24 урока, практики на проверку
-            понимания и свободные задания для закрепления навыков в Unity и C#.
-          </p>
+          <span className="course-eyebrow">Раздел инструкции</span>
+          <h1>Инструкция по старту работы с Node2Code</h1>
         </div>
 
         <div className="course-overview-card">
@@ -33,15 +29,15 @@ const Course: React.FC = () => {
       <div className="course-summary-grid">
         <article className="course-summary-card">
           <h2>Что внутри</h2>
-          <p>Unity Hub, интерфейс движка, визуальные ноды, Space Invaders, генерация C#, практика со скриптами и реверс-инжиниринг кода.</p>
+          <p>Unity Hub, установка редактора, базовые окна Unity и пошаговое подключение Node2Code.</p>
         </article>
         <article className="course-summary-card">
-          <h2>Как устроено обучение</h2>
-          <p>Каждый модуль содержит цель, набор уроков и блок практики: проверка понимания и свободное задание.</p>
+          <h2>Как устроен раздел</h2>
+          <p>Один модуль содержит цель, три урока и краткий блок практики для проверки, что старт выполнен правильно.</p>
         </article>
         <article className="course-summary-card">
-          <h2>Финальный результат</h2>
-          <p>Ученик понимает Unity, читает связь между нодами и C#, умеет строить механику и расширять плагин кодом.</p>
+          <h2>Результат</h2>
+          <p>Пользователь получает готовую стартовую среду и понимает, как открыть плагин и перейти к дальнейшей работе.</p>
         </article>
       </div>
 
@@ -58,9 +54,6 @@ const Course: React.FC = () => {
               </div>
 
               <h3>{module.title}</h3>
-              <p className="topic-goal">
-                <strong>Цель:</strong> {module.goal}
-              </p>
 
               <ul className="topic-preview-list">
                 {module.lessons.slice(0, 3).map((lesson) => (

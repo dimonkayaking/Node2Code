@@ -25,7 +25,7 @@ const Header: React.FC = () => {
           {user ? (
             <>
               <Link to="/plugin" onClick={hideMobileMenu}>Плагин</Link>
-              <Link to="/course" onClick={hideMobileMenu}>Курс</Link>
+              <Link to="/instructions" onClick={hideMobileMenu}>Инструкция</Link>
               <button className="icon-btn" onClick={toggleTheme} title="Переключить тему">💡</button>
               <Link to="/profile" className="header-action-btn" onClick={hideMobileMenu}>Профиль</Link>
               <button

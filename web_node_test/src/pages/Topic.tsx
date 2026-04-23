@@ -11,13 +11,12 @@ const Topic: React.FC = () => {
 
   return (
     <section className="topic-page">
-      <Link to="/course" className="back-topic">← Назад ко всем модулям</Link>
+      <Link to="/instructions" className="back-topic">← Назад к инструкции</Link>
 
       <div className="topic-hero">
         <div>
           <span className="topic-eyebrow">Модуль {module.order}</span>
           <h1>{module.title}</h1>
-          <p><strong>Цель модуля:</strong> {module.goal}</p>
         </div>
 
         <div className="topic-side-card">
@@ -80,7 +79,7 @@ const Topic: React.FC = () => {
             ) : (
               <article className="practice-card">
                 <span className="practice-type practice-type--free">Итог</span>
-                <p>В этом модуле акцент сделан на завершение курса, подведение итогов и определение следующего шага в развитии.</p>
+                <p>В этом модуле собраны базовые шаги для старта и первичной проверки настройки окружения.</p>
               </article>
             )}
           </div>

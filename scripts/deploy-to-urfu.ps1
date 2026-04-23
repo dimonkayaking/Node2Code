@@ -7,6 +7,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Assert-LastExitCode {
+  param([string]$Step)
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Step failed with exit code $LASTEXITCODE"
+  }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
 $archiveName = "node2code-deploy.tar.gz"
@@ -34,6 +41,7 @@ try {
     --exclude="**/dist" `
     --exclude="$archiveName" `
     .
+  Assert-LastExitCode "Archive creation"
 }
 finally {
   Pop-Location
@@ -41,9 +49,11 @@ finally {
 
 Write-Host "==> Создаю папку на сервере..."
 ssh "$ServerUser@$ServerIp" "mkdir -p $ServerPath"
+Assert-LastExitCode "Remote directory creation"
 
 Write-Host "==> Передаю архив на сервер..."
 scp $archivePath "${ServerUser}@${ServerIp}:${remoteArchivePath}"
+Assert-LastExitCode "Archive upload"
 
 $remoteCmd = @"
 set -e
@@ -59,6 +69,7 @@ docker compose ps
 
 Write-Host "==> Запускаю деплой на сервере..."
 ssh "$ServerUser@$ServerIp" $remoteCmd
+Assert-LastExitCode "Remote deploy"
 
-Write-Host "==> Готово. Проверка API:"
+Write-Host "==> Deploy completed. API check:"
 Write-Host "ssh $ServerUser@$ServerIp `"curl -s http://localhost/ping`""

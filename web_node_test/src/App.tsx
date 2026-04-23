@@ -61,12 +61,16 @@ function App() {
               />
               <Route path="/plugin" element={<Plugin />} />
               <Route
-                path="/course"
+                path="/instructions"
                 element={
                   <ProtectedRoute>
                     <Course />
                   </ProtectedRoute>
                 }
+              />
+              <Route
+                path="/course"
+                element={<Navigate to="/instructions" replace />}
               />
               <Route
                 path="/topic/:id"

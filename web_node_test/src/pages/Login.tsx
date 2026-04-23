@@ -32,7 +32,7 @@ const Login: React.FC = () => {
 
     try {
       await login({ email: sanitizedEmail, password });
-      navigate('/course');
+      navigate('/instructions');
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors((error.fields as Partial<Record<keyof LoginFormValues, string>>) || {});
