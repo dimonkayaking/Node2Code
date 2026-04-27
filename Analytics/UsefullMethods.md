@@ -312,7 +312,7 @@
 - `static void LogError(object message, Object context)`
 
 ### `DrawLine`
-Рисует линию в окне Scene (для отладки).
+Рисует линию в окне Scene (для отладки). Ситуативное использование (не обязателен для MVP).
 
 - `static void DrawLine(Vector3 start, Vector3 end)`
 - `static void DrawLine(Vector3 start, Vector3 end, Color color)`
@@ -320,7 +320,7 @@
 - `static void DrawLine(Vector3 start, Vector3 end, Color color, float duration, bool depthTest)`
 
 ### `DrawRay`
-Рисует луч из точки в заданном направлении.
+Рисует луч из точки в заданном направлении. Ситуативное использование (не обязателен для MVP).
 
 - `static void DrawRay(Vector3 start, Vector3 dir)`
 - `static void DrawRay(Vector3 start, Vector3 dir, Color color)`
@@ -329,7 +329,7 @@
 
 ---
 
-## 11. Класс `Gizmos`
+## 11. Класс `Gizmos` - Ситуативное использование (не обязателен для MVP).
 
 ### `color`
 Цвет для всех последующих gizmo-примитивов.
