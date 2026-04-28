@@ -61,6 +61,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         public const float CompactDataNodeMinHeight = 52f;
 
         static readonly ConditionalWeakTable<BaseNodeView, object> s_chromeRepairInstalled = new();
+        static readonly ConditionalWeakTable<BaseNodeView, object> s_outlineHandlersInstalled = new();
+
+        // Голубые цвета совпадают с Unity GraphView selection border.
+        private static readonly Color SelectedNodeOutlineColor = new Color(68f / 255f, 192f / 255f, 255f / 255f, 1.0f);
+        private static readonly Color HoveredNodeOutlineColor  = new Color(68f / 255f, 192f / 255f, 255f / 255f, 0.5f);
 
         /// <summary>
         /// Категория Flow: оставляем стандартное сворачивание ноды GraphView (плашки портов).
@@ -128,6 +133,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (nodeView == null)
                 return;
 
+            ApplyNodeOutlineColor(nodeView);
+
             if (ShouldStripUnityPortCollapseChrome(nodeView))
             {
                 nodeView.capabilities &= ~Capabilities.Collapsible;
@@ -193,6 +200,16 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             });
 
             nodeView.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                nodeView.schedule.Execute(() => PerformFullNodeAppearanceFix(nodeView)).ExecuteLater(0);
+            });
+
+            // Selection state меняется после клика/drag-select: обновляем цвет рамки после смены selected.
+            nodeView.RegisterCallback<MouseDownEvent>(_ =>
+            {
+                nodeView.schedule.Execute(() => PerformFullNodeAppearanceFix(nodeView)).ExecuteLater(0);
+            });
+            nodeView.RegisterCallback<MouseUpEvent>(_ =>
             {
                 nodeView.schedule.Execute(() => PerformFullNodeAppearanceFix(nodeView)).ExecuteLater(0);
             });
@@ -515,6 +532,162 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             // Сбросим жестко заданные размеры (inline style), которые не дают ноде сжаться
             nodeView.style.width = StyleKeyword.Auto;
             nodeView.style.height = StyleKeyword.Auto;
+        }
+
+        private static void ApplyNodeOutlineColor(BaseNodeView nodeView)
+        {
+            if (nodeView?.nodeTarget is not CustomBaseNode customNode)
+                return;
+
+            // Убираем прежний border с mainContainer (старая версия), чтобы не было двух рамок.
+            if (nodeView.mainContainer != null)
+            {
+                nodeView.mainContainer.style.borderTopWidth    = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderRightWidth  = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderBottomWidth = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderLeftWidth   = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderTopColor    = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderRightColor  = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderBottomColor = StyleKeyword.Null;
+                nodeView.mainContainer.style.borderLeftColor   = StyleKeyword.Null;
+            }
+
+            // #selection-border — именно тот элемент, на котором GraphProcessor/Unity рисует
+            // контур выделения. У него уже правильные скруглённые углы, совпадающие с формой ноды.
+            var selBorder = nodeView.Q("selection-border");
+            if (selBorder == null)
+                return;
+
+            var categoryColor = ResolveNodeOutlineColor(customNode.NodeType);
+
+            // Текущее состояние: выбранная нода → синий, остальное → цвет категории.
+            var currentColor = nodeView.selected ? SelectedNodeOutlineColor : categoryColor;
+            SetOutlineBorder(selBorder, 2f, currentColor);
+
+            // Регистрируем hover-колбэки один раз на ноду.
+            if (s_outlineHandlersInstalled.TryGetValue(nodeView, out _))
+                return;
+
+            s_outlineHandlersInstalled.Add(nodeView, new object());
+
+            var capturedBorder   = selBorder;
+            var capturedCategory = categoryColor;
+
+            nodeView.RegisterCallback<MouseEnterEvent>(_ =>
+            {
+                if (!nodeView.selected)
+                    SetOutlineBorder(capturedBorder, 2f, HoveredNodeOutlineColor);
+            });
+            nodeView.RegisterCallback<MouseLeaveEvent>(_ =>
+            {
+                if (!nodeView.selected)
+                    SetOutlineBorder(capturedBorder, 2f, capturedCategory);
+            });
+        }
+
+        /// <summary>
+        /// Только обновляет цвет рамки ноды без полного appearance-fix.
+        /// Используется при глобальном сбросе выделения (клик по пустому пространству).
+        /// </summary>
+        public static void RefreshNodeOutlineColor(BaseNodeView nodeView)
+        {
+            if (nodeView?.nodeTarget is not CustomBaseNode customNode)
+                return;
+
+            var selBorder = nodeView.Q("selection-border");
+            if (selBorder == null)
+                return;
+
+            var color = nodeView.selected
+                ? SelectedNodeOutlineColor
+                : ResolveNodeOutlineColor(customNode.NodeType);
+
+            SetOutlineBorder(selBorder, 2f, color);
+        }
+
+        private static void SetOutlineBorder(VisualElement element, float width, Color color)
+        {
+            element.style.borderTopWidth    = width;
+            element.style.borderRightWidth  = width;
+            element.style.borderBottomWidth = width;
+            element.style.borderLeftWidth   = width;
+            element.style.borderTopColor    = color;
+            element.style.borderRightColor  = color;
+            element.style.borderBottomColor = color;
+            element.style.borderLeftColor   = color;
+        }
+
+        private static Color ResolveNodeOutlineColor(NodeType type)
+        {
+            switch (type)
+            {
+                // Литералы
+                case NodeType.LiteralInt:
+                case NodeType.LiteralFloat:
+                case NodeType.LiteralBool:
+                case NodeType.LiteralString:
+                    return Hex("#4CAF50");
+
+                // Математика
+                case NodeType.MathAdd:
+                case NodeType.MathSubtract:
+                case NodeType.MathMultiply:
+                case NodeType.MathDivide:
+                case NodeType.MathModulo:
+                case NodeType.MathfAbs:
+                case NodeType.MathfMax:
+                case NodeType.MathfMin:
+                    return Hex("#2196F3");
+
+                // Сравнения
+                case NodeType.CompareEqual:
+                case NodeType.CompareNotEqual:
+                case NodeType.CompareGreater:
+                case NodeType.CompareLess:
+                case NodeType.CompareGreaterOrEqual:
+                case NodeType.CompareLessOrEqual:
+                    return Hex("#FF9800");
+
+                // Логика
+                case NodeType.LogicalAnd:
+                case NodeType.LogicalOr:
+                case NodeType.LogicalNot:
+                    return Hex("#9C27B0");
+
+                // Управление потоком
+                case NodeType.FlowIf:
+                case NodeType.FlowElse:
+                case NodeType.FlowFor:
+                case NodeType.FlowWhile:
+                    return Hex("#F44336");
+
+                // Ввод/Вывод
+                case NodeType.ConsoleWriteLine:
+                case NodeType.DebugLog:
+                    return Hex("#FFFFFF");
+
+                // Конвертация
+                case NodeType.IntParse:
+                case NodeType.FloatParse:
+                case NodeType.ToStringConvert:
+                    return Hex("#FFC107");
+
+                // Unity
+                case NodeType.UnityGetPosition:
+                case NodeType.UnitySetPosition:
+                case NodeType.UnityVector3:
+                    return Hex("#8D6E63");
+
+                default:
+                    return Hex("#9E9E9E");
+            }
+        }
+
+        private static Color Hex(string value)
+        {
+            return ColorUtility.TryParseHtmlString(value, out var parsed)
+                ? parsed
+                : new Color(0.62f, 0.62f, 0.62f, 1f);
         }
 
         /// <summary>

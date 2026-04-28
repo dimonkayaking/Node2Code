@@ -15,6 +15,10 @@ namespace CustomVisualScripting.Windows.Views
 
         private readonly IMGUIContainer _imguiEditor;
 
+        // Флаг: Tab был перехвачен в TrickleDown до того, как IMGUI/UI Toolkit увидели событие.
+        // Отступ вставляется в следующем IMGUI-проходе, пока фокус не менялся.
+        private bool _pendingTabIndent;
+
         private string _code = string.Empty;
         private string _lineNumbers = "1";
         private int _lineCount = 1;
@@ -57,8 +61,9 @@ namespace CustomVisualScripting.Windows.Views
             };
             _imguiEditor.AddToClassList("code-editor-imgui-container");
             _imguiEditor.focusable = true;
-            _imguiEditor.RegisterCallback<KeyDownEvent>(OnTabSwallowBubbleUp);
-            _imguiEditor.RegisterCallback<KeyUpEvent>(OnTabKeyUpSwallowBubbleUp);
+            // TrickleDown: перехватываем Tab ДО того как IMGUIContainer получит событие.
+            // Это единственный способ предотвратить и IMGUI-переход фокуса, и UI Toolkit-навигацию.
+            _imguiEditor.RegisterCallback<KeyDownEvent>(OnTabTrickleDown, TrickleDown.TrickleDown);
             Add(_imguiEditor);
 
             style.flexGrow = 1;
@@ -66,8 +71,7 @@ namespace CustomVisualScripting.Windows.Views
             style.marginLeft = 5;
             style.marginRight = 5;
 
-            RegisterCallback<KeyDownEvent>(OnTabSwallowBubbleUp);
-            RegisterCallback<KeyUpEvent>(OnTabKeyUpSwallowBubbleUp);
+            RegisterCallback<KeyDownEvent>(OnTabTrickleDown, TrickleDown.TrickleDown);
             RegisterCallback<NavigationMoveEvent>(OnNavigationMoveTrickleDown, TrickleDown.TrickleDown);
             RegisterCallback<NavigationSubmitEvent>(OnNavigationSubmitTrickleDown, TrickleDown.TrickleDown);
 
@@ -83,8 +87,7 @@ namespace CustomVisualScripting.Windows.Views
             if (root == null)
                 return;
 
-            root.RegisterCallback<KeyDownEvent>(OnRootKeyDownBubbleUp);
-            root.RegisterCallback<KeyUpEvent>(OnRootKeyUpBubbleUp);
+            root.RegisterCallback<KeyDownEvent>(OnRootTabTrickleDown, TrickleDown.TrickleDown);
             root.RegisterCallback<NavigationMoveEvent>(OnRootNavigationMove, TrickleDown.TrickleDown);
         }
 
@@ -94,8 +97,7 @@ namespace CustomVisualScripting.Windows.Views
             if (root == null)
                 return;
 
-            root.UnregisterCallback<KeyDownEvent>(OnRootKeyDownBubbleUp);
-            root.UnregisterCallback<KeyUpEvent>(OnRootKeyUpBubbleUp);
+            root.UnregisterCallback<KeyDownEvent>(OnRootTabTrickleDown, TrickleDown.TrickleDown);
             root.UnregisterCallback<NavigationMoveEvent>(OnRootNavigationMove, TrickleDown.TrickleDown);
         }
 
@@ -111,66 +113,53 @@ namespace CustomVisualScripting.Windows.Views
                    (focused is VisualElement ve && ve.FindCommonAncestor(_imguiEditor) == _imguiEditor);
         }
 
-        private void OnRootKeyDownBubbleUp(KeyDownEvent evt)
+        private void OnRootTabTrickleDown(KeyDownEvent evt)
         {
             if (!IsCodeEditorFocused())
                 return;
-            SwallowIfTab(evt);
-        }
-
-        private void OnRootKeyUpBubbleUp(KeyUpEvent evt)
-        {
-            if (!IsCodeEditorFocused())
-                return;
-            SwallowIfTab(evt);
+            SwallowTabAndScheduleIndent(evt);
         }
 
         private void OnRootNavigationMove(NavigationMoveEvent evt)
         {
             if (!IsCodeEditorFocused())
                 return;
-            evt.StopPropagation();
-        }
-
-        private void OnTabSwallowBubbleUp(KeyDownEvent evt)
-        {
-            if (!IsCodeEditorFocused())
-                return;
-            SwallowIfTab(evt);
-        }
-
-        private void OnTabKeyUpSwallowBubbleUp(KeyUpEvent evt)
-        {
-            if (!IsCodeEditorFocused())
-                return;
-            SwallowIfTab(evt);
-        }
-        // Блокируем tab-навигацию UI Toolkit после обработки IMGUI-полем,
-        // чтобы Tab успевал вставить 4 пробела через HandleTabIndentIfNeeded.
-        private static void SwallowIfTab(KeyDownEvent evt)
-        {
-            if (evt.keyCode != KeyCode.Tab && evt.character != '\t')
-                return;
             evt.StopImmediatePropagation();
             evt.StopPropagation();
         }
 
-        private static void SwallowIfTab(KeyUpEvent evt)
+        // TrickleDown: перехватываем Tab до IMGUIContainer — фокус не сдвигается ни в IMGUI, ни в UI Toolkit.
+        // Отступ применяется флагом в следующем IMGUI-кадре (внутри DrawEditor), пока фокус сохранён.
+        private void OnTabTrickleDown(KeyDownEvent evt)
+        {
+            if (!IsCodeEditorFocused())
+                return;
+            SwallowTabAndScheduleIndent(evt);
+        }
+
+        private void SwallowTabAndScheduleIndent(KeyDownEvent evt)
         {
             if (evt.keyCode != KeyCode.Tab && evt.character != '\t')
                 return;
+            if (evt.shiftKey)
+                return;
+
             evt.StopImmediatePropagation();
             evt.StopPropagation();
-        }
 
+            _pendingTabIndent = true;
+            _imguiEditor.MarkDirtyRepaint();
+        }
 
         private void OnNavigationMoveTrickleDown(NavigationMoveEvent evt)
         {
+            evt.StopImmediatePropagation();
             evt.StopPropagation();
         }
 
         private void OnNavigationSubmitTrickleDown(NavigationSubmitEvent evt)
         {
+            evt.StopImmediatePropagation();
             evt.StopPropagation();
         }
 
@@ -187,6 +176,11 @@ namespace CustomVisualScripting.Windows.Views
         private void DrawEditor()
         {
             EnsureStyles();
+
+            // Если Tab был перехвачен в TrickleDown — восстанавливаем IMGUI-фокус,
+            // чтобы TextEditor знал, в каком контроле сейчас каретка.
+            if (_pendingTabIndent)
+                GUI.FocusControl(CodeControlName);
 
             var viewportRect = GUILayoutUtility.GetRect(
                 0f,
@@ -254,9 +248,14 @@ namespace CustomVisualScripting.Windows.Views
                 Mathf.Max(lineHeight, contentRect.height - OuterVerticalPadding * 2f));
 
             EditorGUIUtility.AddCursorRect(codeRect, MouseCursor.Text);
+
+            // Применяем отложенный Tab-отступ до вызова TextArea,
+            // чтобы TextArea получил уже обновлённую строку и позицию каретки.
+            if (_pendingTabIndent)
+                ApplyPendingTabIndent();
+
             GUI.SetNextControlName(CodeControlName);
             string next = GUI.TextArea(codeRect, _code, _codeStyle);
-            HandleTabIndentIfNeeded(ref next);
             bool textChangedThisFrame = false;
             if (!string.Equals(next, _code))
             {
@@ -268,31 +267,34 @@ namespace CustomVisualScripting.Windows.Views
             EnsureCaretVisible(codeRect, viewportRect, lineHeight, textChangedThisFrame);
         }
 
-        private static void HandleTabIndentIfNeeded(ref string text)
+        private void ApplyPendingTabIndent()
         {
-            var evt = Event.current;
-            if (evt == null || evt.type != EventType.KeyDown || evt.keyCode != KeyCode.Tab || evt.shift)
-                return;
-            if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName, System.StringComparison.Ordinal))
-                return;
+            _pendingTabIndent = false;
 
+            // keyboardControl хранит ID контрола с фокусом — берём TextEditor из state-кеша IMGUI.
             var editor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
             if (editor == null)
                 return;
 
-            int start = Mathf.Clamp(Mathf.Min(editor.cursorIndex, editor.selectIndex), 0, text?.Length ?? 0);
-            int end = Mathf.Clamp(Mathf.Max(editor.cursorIndex, editor.selectIndex), 0, text?.Length ?? 0);
-            text ??= string.Empty;
+            _code ??= string.Empty;
+            int start = Mathf.Clamp(Mathf.Min(editor.cursorIndex, editor.selectIndex), 0, _code.Length);
+            int end   = Mathf.Clamp(Mathf.Max(editor.cursorIndex, editor.selectIndex), 0, _code.Length);
             const string indent = "    ";
 
-            if (end > start)
-                text = text.Remove(start, end - start).Insert(start, indent);
-            else
-                text = text.Insert(start, indent);
+            _code = end > start
+                ? _code.Remove(start, end - start).Insert(start, indent)
+                : _code.Insert(start, indent);
 
-            editor.cursorIndex = start + indent.Length;
-            editor.selectIndex = editor.cursorIndex;
-            evt.Use();
+            int newCursor = start + indent.Length;
+
+            // Синхронизируем editor.text ДО вызова GUI.TextArea.
+            // Если этого не сделать, TextArea обнаружит расхождение _code vs editor.text
+            // и выделит вставленную часть как «внешнее изменение» — отсюда 4 выделенных пробела.
+            editor.text = _code;
+            editor.cursorIndex = newCursor;
+            editor.selectIndex = newCursor;   // нет выделения — только каретка
+
+            RebuildLineMetadata();
             GUI.changed = true;
         }
 

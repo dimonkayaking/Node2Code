@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using GraphProcessor;
 using UnityEditor;
+using UnityEngine.UIElements;
 
 namespace CustomVisualScripting.Editor.Nodes.Views
 {
@@ -38,6 +39,32 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             };
 
             schedule.Execute(PollForNewNodeViews).Every(16);
+
+            // Перехватываем любой клик на GraphView (включая клик по пустому пространству,
+            // который снимает выделение) и обновляем цвет рамок всех нод после того,
+            // как Unity успеет изменить свойство selected.
+            RegisterCallback<PointerDownEvent>(_ => ScheduleOutlineRefreshForAllNodes(), TrickleDown.TrickleDown);
+        }
+
+        bool _pendingOutlineRefresh;
+
+        void ScheduleOutlineRefreshForAllNodes()
+        {
+            if (_pendingOutlineRefresh)
+                return;
+            _pendingOutlineRefresh = true;
+            schedule.Execute(() =>
+            {
+                _pendingOutlineRefresh = false;
+                if (nodeViews == null)
+                    return;
+                foreach (var nv in nodeViews)
+                {
+                    if (nv != null)
+                        NodeViewBoundsUtils.RefreshNodeOutlineColor(nv);
+                }
+            // 80 мс — достаточно, чтобы Unity обновил selected до нашего чтения.
+            }).ExecuteLater(80);
         }
 
         void PollForNewNodeViews()
