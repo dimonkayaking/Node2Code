@@ -21,6 +21,7 @@ namespace CustomVisualScripting.Editor.Windows
     {
         private void CleanupGraph()
         {
+            DisposeAllSubspaceRuntimes();
             if (_graphView != null)
             {
                 _graphView.graphViewChanged -= OnGraphViewChanged;
@@ -40,6 +41,7 @@ namespace CustomVisualScripting.Editor.Windows
         {
             _currentGraph = new CompleteGraphData();
             _hasUnsavedChanges = false;
+            InitializeTabsState();
 
             var root = rootVisualElement;
             var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
@@ -66,11 +68,7 @@ namespace CustomVisualScripting.Editor.Windows
             _codeEditor = new CodeEditorView();
             splitView.Add(_codeEditor);
 
-            _graphContainer = new VisualElement();
-            _graphContainer.style.backgroundColor = new StyleColor(new Color(0.22f, 0.22f, 0.22f));
-            _graphContainer.style.flexGrow = 1;
-
-            splitView.Add(_graphContainer);
+            BuildGraphAreaWithTabs(splitView);
             root.Add(splitView);
 
             _errorPanel = new ErrorPanel();
@@ -88,13 +86,13 @@ namespace CustomVisualScripting.Editor.Windows
         private void RecreateGraphView()
         {
             CleanupGraph();
-            _graphContainer.Clear();
+            _graphHost?.Clear();
             UpdateGraphView();
         }
 
         private void UpdateGraphView()
         {
-            _graphContainer.Clear();
+            _graphHost?.Clear();
 
             try
             {
@@ -222,7 +220,7 @@ namespace CustomVisualScripting.Editor.Windows
 
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
-                _graphContainer.Add(_graphView);
+                DisplayActiveTabContent();
 
                 _toolbar.SetStatusSuccess($"Граф готов — {_internalGraph.nodes.Count} нод");
             }

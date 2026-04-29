@@ -94,3 +94,63 @@
     margin-top: 20px;
     margin-left: 10px;
 }
+
+/* Graph tabs */
+.graph-tab-strip {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(42, 42, 44);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(64, 64, 66);
+    padding: 4px 6px;
+    min-height: 30px;
+}
+
+.graph-tab-host {
+    flex-grow: 1;
+}
+
+.graph-tab-item {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(52, 52, 54);
+    border-radius: 6px;
+    margin-right: 6px;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+.graph-tab-item--active {
+    background-color: rgb(73, 73, 77);
+}
+
+.graph-tab-title {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(222, 222, 222);
+    font-size: 11px;
+    padding-left: 8px;
+    padding-right: 8px;
+    min-height: 22px;
+}
+
+.graph-tab-close {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(200, 200, 200);
+    font-size: 11px;
+    min-width: 18px;
+    min-height: 18px;
+    margin-right: 2px;
+}
+
+.node-subspace-link {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(164, 200, 255);
+    min-width: 18px;
+    min-height: 18px;
+    font-size: 11px;
+    padding-left: 0;
+    padding-right: 0;
+}

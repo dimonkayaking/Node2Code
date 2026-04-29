@@ -1,6 +1,7 @@
 using UnityEngine.UIElements;
 using GraphProcessor;
 using CustomVisualScripting.Editor.Nodes.Flow;
+using CustomVisualScripting.Editor.Windows;
 
 namespace CustomVisualScripting.Editor.Nodes.Views
 {
@@ -11,6 +12,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
         private SubGraphPanel _bodyPanel;
         private VisualElement _panelsContainer;
         private Label _collapseToggle;
+        private Button _openSubspaceButton;
         private bool _panelsExpanded = true;
         private IVisualElementScheduledItem _syncBoundsTask;
 
@@ -44,6 +46,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 e.StopPropagation();
             });
             titleContainer.Add(_collapseToggle);
+
+            _openSubspaceButton = new Button(OpenBodySubspace) { text = "↗" };
+            _openSubspaceButton.AddToClassList("node-subspace-link");
+            _openSubspaceButton.style.position = Position.Absolute;
+            _openSubspaceButton.style.right = 30;
+            _openSubspaceButton.style.top = 3;
+            titleContainer.Add(_openSubspaceButton);
 
             _panelsContainer = new VisualElement();
             _panelsContainer.style.minWidth = 350;
@@ -91,6 +100,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             RequestBoundsSync();
         }
 
+        private void OpenBodySubspace()
+        {
+            if (_node == null)
+                return;
+            VisualScriptingWindow.ActiveWindow?.OpenSubspaceFromNode(_node.NodeId, SubspaceKind.Body);
+        }
+
         public (float minW, float minH) GetResolvedMinBounds() =>
             _panelsExpanded
                 ? (NodeViewBoundsUtils.FlowElseMinWidth, NodeViewBoundsUtils.FlowElseMinHeight)
@@ -119,12 +135,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             if (_collapseToggle != null && _collapseToggle.parent == titleContainer)
                 titleContainer.Remove(_collapseToggle);
+            if (_openSubspaceButton != null && _openSubspaceButton.parent == titleContainer)
+                titleContainer.Remove(_openSubspaceButton);
 
             _panelsContainer?.RemoveFromHierarchy();
 
             _bodyPanel = null;
             _panelsContainer = null;
             _collapseToggle = null;
+            _openSubspaceButton = null;
         }
     }
 }

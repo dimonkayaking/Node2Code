@@ -177,6 +177,7 @@ namespace CustomVisualScripting.Editor.Windows
             _hasUnsavedChanges = true;
             _forceAutoLayoutNextUpdate = true;
             _collapseFlowSubspacesOnNextRebuild = true;
+            ResetTabsToFileOnly();
             
             RecreateGraphView();
             
@@ -267,6 +268,7 @@ namespace CustomVisualScripting.Editor.Windows
                 File.WriteAllText(_currentFilePath, code);
                 _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(_currentFilePath)}");
                 _hasUnsavedChanges = false;
+                RefreshFileTabTitle();
             }
             catch (Exception e)
             {
@@ -287,6 +289,7 @@ namespace CustomVisualScripting.Editor.Windows
             string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
             _codeEditor.Code = code;
             _currentFilePath = path;
+            RefreshFileTabTitle();
 
             try
             {
@@ -310,6 +313,8 @@ namespace CustomVisualScripting.Editor.Windows
                 var code = File.ReadAllText(path);
                 _currentFilePath = path;
                 _codeEditor.Code = code;
+                ResetTabsToFileOnly();
+                RefreshFileTabTitle();
 
                 var result = ParserBridge.Parse(code);
                 if (result.HasErrors)
@@ -341,6 +346,7 @@ namespace CustomVisualScripting.Editor.Windows
             _currentFilePath = null;
             _hasUnsavedChanges = false;
             _collapseFlowSubspacesOnNextRebuild = false;
+            ResetTabsToFileOnly();
             RecreateGraphView();
             _toolbar.SetStatusNormal("Очищено");
         }
