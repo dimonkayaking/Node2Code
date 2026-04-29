@@ -19,6 +19,8 @@ namespace CustomVisualScripting.Editor.Windows
 {
     public partial class VisualScriptingWindow
     {
+        private NodeToolbarView _nodeToolbar; // ДОБАВЛЕНО
+
         private void CleanupGraph()
         {
             DisposeAllSubspaceRuntimes();
@@ -70,6 +72,13 @@ namespace CustomVisualScripting.Editor.Windows
 
             BuildGraphAreaWithTabs(splitView);
             root.Add(splitView);
+
+            // ДОБАВЛЕНО: создаём панель инструментов нод
+            if (_graphView != null)
+            {
+                _nodeToolbar = new NodeToolbarView(_graphView);
+                root.Add(_nodeToolbar);
+            }
 
             _errorPanel = new ErrorPanel();
             root.Add(_errorPanel);
@@ -221,6 +230,13 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
                 DisplayActiveTabContent();
+
+                // ДОБАВЛЕНО: обновляем тулбар при пересоздании графа
+                if (_nodeToolbar != null && _nodeToolbar.parent != null)
+                    _nodeToolbar.RemoveFromHierarchy();
+                
+                _nodeToolbar = new NodeToolbarView(_graphView);
+                rootVisualElement.Add(_nodeToolbar);
 
                 _toolbar.SetStatusSuccess($"Граф готов — {_internalGraph.nodes.Count} нод");
             }

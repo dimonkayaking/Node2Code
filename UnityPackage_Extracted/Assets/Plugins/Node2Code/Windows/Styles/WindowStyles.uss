@@ -154,3 +154,25 @@
     padding-left: 0;
     padding-right: 0;
 }
+
+/* Node Palette - новый блок (добавить в конец файла) */
+.node-palette-category-button {
+    font-size: 13px;
+    padding: 8px 12px;
+    background-color: rgb(40, 40, 40);
+}
+
+.node-palette-item-button {
+    font-size: 12px;
+    padding: 6px 10px;
+    background-color: rgb(45, 45, 45);
+}
+
+.node-palette-item-button:hover {
+    background-color: rgb(55, 55, 55);
+}
+
+.node-palette-back-button {
+    font-size: 12px;
+    padding: 6px 10px;
+}
