@@ -194,6 +194,12 @@ namespace CustomVisualScripting.Editor.Windows
                     }
                 }
 
+                if (_collapseFlowSubspacesOnNextRebuild)
+                {
+                    CollapseFlowSubspaceNodes(_graphView.nodeViews);
+                    _collapseFlowSubspacesOnNextRebuild = false;
+                }
+
                 ConfigureNodeViewSizing(_graphView.nodeViews);
                 if (_forceAutoLayoutNextUpdate)
                 {
@@ -282,6 +288,28 @@ namespace CustomVisualScripting.Editor.Windows
 
                 nodeView.UnregisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
                 nodeView.RegisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
+            }
+        }
+
+        private static void CollapseFlowSubspaceNodes(IEnumerable<BaseNodeView> nodeViews)
+        {
+            foreach (var nodeView in nodeViews)
+            {
+                switch (nodeView)
+                {
+                    case IfNodeView ifNodeView:
+                        ifNodeView.SetPanelsExpanded(false);
+                        break;
+                    case ElseNodeView elseNodeView:
+                        elseNodeView.SetPanelsExpanded(false);
+                        break;
+                    case ForNodeView forNodeView:
+                        forNodeView.SetPanelsExpanded(false);
+                        break;
+                    case WhileNodeView whileNodeView:
+                        whileNodeView.SetPanelsExpanded(false);
+                        break;
+                }
             }
         }
 

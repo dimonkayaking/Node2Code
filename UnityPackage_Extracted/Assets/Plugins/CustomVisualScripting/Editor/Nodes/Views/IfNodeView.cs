@@ -82,6 +82,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             RequestBoundsSync();
         }
 
+        public void SetPanelsExpanded(bool expanded)
+        {
+            if (_panelsExpanded == expanded)
+                return;
+            TogglePanels();
+        }
+
         private void OnSubGraphChanged()
         {
             _node.conditionSubGraph = _conditionPanel.SubGraph;

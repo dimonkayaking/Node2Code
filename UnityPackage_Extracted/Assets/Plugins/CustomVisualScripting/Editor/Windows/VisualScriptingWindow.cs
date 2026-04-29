@@ -53,6 +53,7 @@ namespace CustomVisualScripting.Editor.Windows
         
         private CSharpProcessRunner _csharpRunner;
         private bool _forceAutoLayoutNextUpdate;
+        private bool _collapseFlowSubspacesOnNextRebuild;
         
         [MenuItem("Tools/Node2Code")]
         public static void OpenWindow()
@@ -175,6 +176,7 @@ namespace CustomVisualScripting.Editor.Windows
             _currentGraph = GraphConverter.LogicToComplete(result.Graph, _currentGraph);
             _hasUnsavedChanges = true;
             _forceAutoLayoutNextUpdate = true;
+            _collapseFlowSubspacesOnNextRebuild = true;
             
             RecreateGraphView();
             
@@ -321,6 +323,7 @@ namespace CustomVisualScripting.Editor.Windows
                 _currentGraph = new CompleteGraphData();
                 _currentGraph = GraphConverter.LogicToComplete(result.Graph, _currentGraph);
                 _hasUnsavedChanges = false;
+                _collapseFlowSubspacesOnNextRebuild = true;
                 RecreateGraphView();
                 _toolbar.SetStatusSuccess($"Загружено и распарсено: {Path.GetFileName(path)}");
             }
@@ -337,6 +340,7 @@ namespace CustomVisualScripting.Editor.Windows
             _errorPanel.Clear();
             _currentFilePath = null;
             _hasUnsavedChanges = false;
+            _collapseFlowSubspacesOnNextRebuild = false;
             RecreateGraphView();
             _toolbar.SetStatusNormal("Очищено");
         }
