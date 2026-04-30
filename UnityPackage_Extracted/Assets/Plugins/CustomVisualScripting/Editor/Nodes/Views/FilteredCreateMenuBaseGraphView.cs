@@ -28,11 +28,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             };
             schedule.Execute(PollForNewNodeViews).Every(16);
             RegisterCallback<PointerDownEvent>(_ => ScheduleOutlineRefreshForAllNodes(), TrickleDown.TrickleDown);
-
-            // Обновляем цвет обводки после отпускания мыши (ловит конец выделения прямоугольником)
             RegisterCallback<MouseUpEvent>(_ => RefreshAllOutlines());
-
-            // Периодически проверяем, не изменилось ли количество выделенных элементов
             schedule.Execute(() =>
             {
                 int currentCount = selection.Count;

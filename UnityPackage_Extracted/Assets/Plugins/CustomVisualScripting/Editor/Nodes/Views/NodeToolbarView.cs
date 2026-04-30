@@ -208,8 +208,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _categoriesPanel.style.flexDirection = FlexDirection.Column;
             _categoriesPanel.style.paddingBottom = 0;
             _categoriesPanel.style.marginBottom = 0;
-            _categoriesPanel.style.paddingLeft = 5;    // уменьшенный левый отступ
-            _categoriesPanel.style.paddingRight = 5;   // уменьшенный правый отступ
+            _categoriesPanel.style.paddingLeft = 5;
+            _categoriesPanel.style.paddingRight = 5;
             _categoriesPanel.style.overflow = Overflow.Hidden;
 
             foreach (var category in _categories)
@@ -280,9 +280,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _nodesPanel.Clear();
             _nodesPanel.style.display = DisplayStyle.Flex;
             _nodesPanel.style.left = -_panelWidth;
-            _nodesPanel.style.paddingLeft = 5;    // уменьшенный левый отступ
-            _nodesPanel.style.paddingRight = 5;   // уменьшенный правый отступ
-            _nodesPanel.style.paddingBottom = 5;  // добавлен нижний отступ (такой же, как боковые)
+            _nodesPanel.style.paddingLeft = 5;
+            _nodesPanel.style.paddingRight = 5;
+            _nodesPanel.style.paddingBottom = 5;
 
             var backButton = new Button(() => HideNodesPanel());
             backButton.text = "← Back";
@@ -317,8 +317,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                     _nodesPanel.Add(nodeButton);
                 }
             }
-
-            // Нижний отступ уже задан выше, ничего дополнительного не нужно
         }
 
         private VisualElement CreateNodeButton(Type nodeType, string displayName, Color categoryColor)
