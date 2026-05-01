@@ -34,30 +34,6 @@
     margin-left: 8px;
 }
 
-/* Code Editor */
-.code-editor {
-    background-color: rgb(30, 30, 30);
-    padding: 5px;
-}
-
-.code-editor-title {
-    font-size: 14px;
-    -unity-font-style: bold;
-    color: white;
-    margin-bottom: 5px;
-}
-
-.code-editor-field {
-    background-color: rgb(45, 45, 45);
-    color: rgb(220, 220, 220);
-    font-size: 12px;
-}
-
-/* IMGUI-backed code editor host */
-.code-editor-imgui-container {
-    background-color: rgb(30, 30, 30);
-}
-
 /* Error Panel */
 .error-panel {
     background-color: rgb(51, 26, 26);
@@ -102,12 +78,15 @@
     background-color: rgb(42, 42, 44);
     border-bottom-width: 1px;
     border-bottom-color: rgb(64, 64, 66);
-    padding: 4px 6px;
-    min-height: 30px;
+    padding: 0 6px;
+    min-height: 38px;
 }
 
 .graph-tab-host {
     flex-grow: 1;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
 }
 
 .graph-tab-item {
@@ -155,7 +134,7 @@
     padding-right: 0;
 }
 
-/* Node Palette - новый блок (добавить в конец файла) */
+/* Node Palette */
 .node-palette-category-button {
     font-size: 13px;
     padding: 8px 12px;
@@ -175,4 +154,49 @@
 .node-palette-back-button {
     font-size: 12px;
     padding: 6px 10px;
+}
+
+/* Console View */
+.console-view {
+    margin-top: 0;
+    border-top-width: 1px;
+    border-top-color: black;
+}
+
+/* Специальные правила для CodeEditorView */
+.unity-scroll-view__content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.code-editor-text-field .unity-text-field__input,
+.code-editor-text-field.unity-text-field .unity-text-field__input {
+    border-width: 0 !important;
+    background-color: rgb(30, 30, 30);
+}
+
+.code-editor-text-field .unity-text-field__input:focus,
+.code-editor-text-field.unity-text-field .unity-text-field__input:focus {
+    border-width: 0 !important;
+}
+
+/* ... остальные стили такие же, как в предыдущей версии ... */
+
+/* Специальные правила для CodeEditorView – обеспечить растяжение на всю высоту */
+.unity-scroll-view__content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-grow: 1 !important;
+    height: 100% !important;
+}
+
+.code-editor-text-field .unity-text-field__input,
+.code-editor-text-field.unity-text-field .unity-text-field__input {
+    border-width: 0 !important;
+    background-color: rgb(30, 30, 30);
+}
+
+.code-editor-text-field .unity-text-field__input:focus,
+.code-editor-text-field.unity-text-field .unity-text-field__input:focus {
+    border-width: 0 !important;
 }

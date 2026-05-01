@@ -19,11 +19,16 @@ namespace CustomVisualScripting.Windows.Views
         public ToolbarView()
         {
             style.flexDirection = FlexDirection.Row;
+            style.alignItems = Align.Center;
             style.backgroundColor = new Color(0.25f, 0.25f, 0.25f);
-            style.paddingTop = 8;
-            style.paddingBottom = 8;
+            style.paddingTop = 6;
+            style.paddingBottom = 6;
             style.paddingLeft = 12;
             style.paddingRight = 12;
+            style.borderBottomWidth = 1;
+            style.borderBottomColor = Color.black;
+            style.borderTopWidth = 1;
+            style.borderTopColor = Color.black;
             
             ParseButton = new Button { text = "Парсить код" };
             ConfigureToolbarButton(ParseButton);
@@ -75,6 +80,39 @@ namespace CustomVisualScripting.Windows.Views
             _statusLabel.style.unityTextAlign = TextAnchor.MiddleRight;
             _statusLabel.style.fontSize = 13;
             Add(_statusLabel);
+
+            // Эффект наведения для Run и Stop (только если активны)
+            AddHoverEffect(RunButton);
+            AddHoverEffect(StopButton);
+        }
+
+        private void AddHoverEffect(Button button)
+        {
+            Color normalColor = button.resolvedStyle.backgroundColor;
+            button.RegisterCallback<MouseEnterEvent>(_ =>
+            {
+                if (button.enabledSelf)
+                {
+                    button.style.backgroundColor = LightenColor(normalColor, 0.07f);
+                }
+            });
+            button.RegisterCallback<MouseLeaveEvent>(_ =>
+            {
+                if (button.enabledSelf)
+                {
+                    button.style.backgroundColor = normalColor;
+                }
+            });
+        }
+
+        private static Color LightenColor(Color color, float amount)
+        {
+            return new Color(
+                Mathf.Min(color.r + amount, 1f),
+                Mathf.Min(color.g + amount, 1f),
+                Mathf.Min(color.b + amount, 1f),
+                color.a
+            );
         }
 
         private static void ConfigureToolbarButton(Button button)
@@ -84,7 +122,9 @@ namespace CustomVisualScripting.Windows.Views
             button.style.paddingRight = 12;
             button.style.paddingTop = 4;
             button.style.paddingBottom = 4;
-            button.style.minHeight = 28;
+            button.style.minHeight = 24;
+            button.style.marginTop = 0;
+            button.style.marginBottom = 0;
         }
         
         public void SetRunMode(bool isRunning)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
@@ -19,7 +20,10 @@ namespace CustomVisualScripting.Editor.Windows
 {
     public partial class VisualScriptingWindow
     {
-        private NodeToolbarView _nodeToolbar; // ДОБАВЛЕНО
+        // Константы удалены – они уже определены в основном файле VisualScriptingWindow.cs
+
+        private NodeToolbarView _nodeToolbar;
+        private TwoPaneSplitView _graphAreaSplitter;
 
         private void CleanupGraph()
         {
@@ -31,12 +35,8 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphView.Dispose();
                 _graphView = null;
             }
-
             if (_internalGraph != null)
-            {
                 DestroyImmediate(_internalGraph);
-                _internalGraph = null;
-            }
         }
 
         private void CreateGUI()
@@ -46,12 +46,9 @@ namespace CustomVisualScripting.Editor.Windows
             InitializeTabsState();
 
             var root = rootVisualElement;
-            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
-                "Assets/Plugins/CustomVisualScripting/Windows/Styles/WindowStyles.uss");
+            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/Plugins/CustomVisualScripting/Windows/Styles/WindowStyles.uss");
             if (styleSheet != null && !root.styleSheets.Contains(styleSheet))
-            {
                 root.styleSheets.Add(styleSheet);
-            }
 
             _toolbar = new CustomToolbar();
             _toolbar.ParseButton.clicked += OnParse;
@@ -66,30 +63,94 @@ namespace CustomVisualScripting.Editor.Windows
 
             var splitView = new TwoPaneSplitView(0, 350, TwoPaneSplitViewOrientation.Horizontal);
             splitView.style.flexGrow = 1;
+            splitView.style.marginLeft = 0;
+            splitView.style.marginRight = 0;
+            splitView.style.marginTop = 0;
+            splitView.style.marginBottom = 0;
+            splitView.style.paddingLeft = 0;
+            splitView.style.paddingRight = 0;
+            splitView.style.paddingTop = 0;
+            splitView.style.paddingBottom = 0;
+            splitView.style.borderTopWidth = 0;
+            splitView.style.borderBottomWidth = 0;
+            splitView.style.borderLeftWidth = 0;
+            splitView.style.borderRightWidth = 0;
 
             _codeEditor = new CodeEditorView();
+            _codeEditor.style.marginLeft = 0;
+            _codeEditor.style.marginRight = 0;
+            _codeEditor.style.marginTop = 0;
+            _codeEditor.style.marginBottom = 0;
+            _codeEditor.style.paddingLeft = 0;
+            _codeEditor.style.paddingRight = 0;
+            _codeEditor.style.paddingTop = 0;
+            _codeEditor.style.paddingBottom = 0;
+            _codeEditor.style.borderTopWidth = 0;
+            _codeEditor.style.borderBottomWidth = 0;
+            _codeEditor.style.borderLeftWidth = 0;
+            _codeEditor.style.borderRightWidth = 0;
             splitView.Add(_codeEditor);
 
-            BuildGraphAreaWithTabs(splitView);
-            root.Add(splitView);
+            var rightArea = new VisualElement();
+            rightArea.style.flexGrow = 1;
+            rightArea.style.flexDirection = FlexDirection.Column;
+            rightArea.style.marginLeft = 0;
+            rightArea.style.marginRight = 0;
+            rightArea.style.marginTop = 0;
+            rightArea.style.marginBottom = 0;
+            rightArea.style.paddingLeft = 0;
+            rightArea.style.paddingRight = 0;
+            rightArea.style.paddingTop = 0;
+            rightArea.style.paddingBottom = 0;
+            rightArea.style.borderTopWidth = 0;
+            rightArea.style.borderBottomWidth = 0;
+            rightArea.style.borderLeftWidth = 0;
+            rightArea.style.borderRightWidth = 0;
 
-            // ДОБАВЛЕНО: создаём панель инструментов нод
-            if (_graphView != null)
-            {
-                _nodeToolbar = new NodeToolbarView(_graphView);
-                root.Add(_nodeToolbar);
-            }
+            BuildGraphAreaWithTabs(rightArea);
+
+            _graphAreaSplitter = new TwoPaneSplitView(1, 200, TwoPaneSplitViewOrientation.Horizontal);
+            _graphAreaSplitter.style.flexGrow = 1;
+            _graphAreaSplitter.style.marginLeft = 0;
+            _graphAreaSplitter.style.marginRight = 0;
+            _graphAreaSplitter.style.marginTop = 0;
+            _graphAreaSplitter.style.marginBottom = 0;
+            _graphAreaSplitter.style.paddingLeft = 0;
+            _graphAreaSplitter.style.paddingRight = 0;
+            _graphAreaSplitter.style.paddingTop = 0;
+            _graphAreaSplitter.style.paddingBottom = 0;
+            _graphAreaSplitter.style.borderTopWidth = 0;
+            _graphAreaSplitter.style.borderBottomWidth = 0;
+            _graphAreaSplitter.style.borderLeftWidth = 0;
+            _graphAreaSplitter.style.borderRightWidth = 0;
+
+            _graphHost.RemoveFromHierarchy();
+            _graphAreaSplitter.Add(_graphHost);
+
+            var tempStub = new VisualElement();
+            _graphAreaSplitter.Add(tempStub);
+            rightArea.Add(_graphAreaSplitter);
+            splitView.Add(rightArea);
+            root.Add(splitView);
 
             _errorPanel = new ErrorPanel();
             root.Add(_errorPanel);
 
             _consoleView = new ConsoleView();
-            _consoleView.style.marginTop = 5;
+            _consoleView.style.marginTop = 0;
             root.Add(_consoleView);
 
             _toolbar.SetStatusNormal("Готов к работе");
-
             UpdateGraphView();
+
+            _graphAreaSplitter.Remove(tempStub);
+            _nodeToolbar = new NodeToolbarView(_graphView);
+            _graphAreaSplitter.Add(_nodeToolbar);
+
+            float savedWidth = EditorPrefs.GetFloat("NodeToolbarWidthPref", 200f);
+            _graphAreaSplitter.fixedPaneInitialDimension = savedWidth;
+            _graphAreaSplitter.RegisterCallback<GeometryChangedEvent>(evt =>
+                EditorPrefs.SetFloat("NodeToolbarWidthPref", _graphAreaSplitter.fixedPaneInitialDimension));
         }
 
         private void RecreateGraphView()
@@ -113,23 +174,18 @@ namespace CustomVisualScripting.Editor.Windows
                     foreach (var nodeData in _currentGraph.LogicGraph.Nodes)
                     {
                         var node = CreateNodeFromData(nodeData);
-                        if (node == null)
-                            continue;
-
+                        if (node == null) continue;
                         node.NodeId = nodeData.Id;
                         node.InitializeFromData(nodeData);
-                        if (node.GUID != node.NodeId)
-                            node.SetGUID(node.NodeId);
-
+                        if (node.GUID != node.NodeId) node.SetGUID(node.NodeId);
                         if (node is IntNode intNode && int.TryParse(nodeData.Value, out int intVal))
                             intNode.intValue = intVal;
-                        else if (node is FloatNode floatNode && float.TryParse(nodeData.Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float floatVal))
+                        else if (node is FloatNode floatNode && float.TryParse(nodeData.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatVal))
                             floatNode.floatValue = floatVal;
                         else if (node is BoolNode boolNode && bool.TryParse(nodeData.Value, out bool boolVal))
                             boolNode.boolValue = boolVal;
                         else if (node is StringNode stringNode)
                             stringNode.stringValue = nodeData.Value;
-
                         if (node is IfNode ifNode)
                         {
                             ifNode.conditionSubGraph = nodeData.ConditionSubGraph ?? new GraphData();
@@ -151,7 +207,6 @@ namespace CustomVisualScripting.Editor.Windows
                             whileNode.conditionSubGraph = nodeData.ConditionSubGraph ?? new GraphData();
                             whileNode.bodySubGraph = nodeData.BodySubGraph ?? new GraphData();
                         }
-
                         _internalGraph.AddNode(node);
                         nodeMap[nodeData.Id] = node;
                     }
@@ -171,18 +226,11 @@ namespace CustomVisualScripting.Editor.Windows
                         if (!nodeMap.TryGetValue(edgeData.ToNodeId, out var toNode)) continue;
                         if (!_graphView.nodeViewsPerNode.TryGetValue(fromNode, out var fromNodeView)) continue;
                         if (!_graphView.nodeViewsPerNode.TryGetValue(toNode, out var toNodeView)) continue;
-
-                        Debug.Log($"[VS] Восстанавливаем связь: {edgeData.FromNodeId}.{edgeData.FromPort} → {edgeData.ToNodeId}.{edgeData.ToPort}");
-
                         var fromPort = fromNodeView.outputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.FromPort));
                         var toPort = toNodeView.inputPortViews.FirstOrDefault(p => IsPortMatchForStorage(p, edgeData.ToPort));
-
-                        if (fromPort == null || toPort == null)
-                            continue;
-                        if (fromPort.direction != Direction.Output || toPort.direction != Direction.Input)
-                            continue;
-
-                        bool alreadyConnected = _graphView.edgeViews.Any(existingEdge => existingEdge.output == fromPort && existingEdge.input == toPort);
+                        if (fromPort == null || toPort == null) continue;
+                        if (fromPort.direction != Direction.Output || toPort.direction != Direction.Input) continue;
+                        bool alreadyConnected = _graphView.edgeViews.Any(e => e.output == fromPort && e.input == toPort);
                         if (!alreadyConnected)
                             _graphView.Connect(toPort, fromPort);
                     }
@@ -192,9 +240,7 @@ namespace CustomVisualScripting.Editor.Windows
                 {
                     foreach (var nodeView in _graphView.nodeViews)
                     {
-                        if (nodeView.nodeTarget is not CustomBaseNode customNode)
-                            continue;
-
+                        if (nodeView.nodeTarget is not CustomBaseNode customNode) continue;
                         var visualNode = _currentGraph.VisualNodes.FirstOrDefault(v => v.NodeId == customNode.NodeId);
                         if (visualNode != null)
                             nodeView.SetPosition(new Rect(visualNode.Position, Vector2.zero));
@@ -222,21 +268,15 @@ namespace CustomVisualScripting.Editor.Windows
                 SyncNodeBoundsToLayout(_graphView.nodeViews);
                 _graphView.schedule.Execute(() =>
                 {
-                    if (_graphView?.nodeViews == null)
-                        return;
+                    if (_graphView?.nodeViews == null) return;
                     SyncNodeBoundsToLayout(_graphView.nodeViews);
                 }).ExecuteLater(0);
 
                 _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
                 _graphView.FrameAll();
-                DisplayActiveTabContent();
 
-                // ДОБАВЛЕНО: обновляем тулбар при пересоздании графа
-                if (_nodeToolbar != null && _nodeToolbar.parent != null)
-                    _nodeToolbar.RemoveFromHierarchy();
-                
-                _nodeToolbar = new NodeToolbarView(_graphView);
-                rootVisualElement.Add(_nodeToolbar);
+                _graphHost?.Add(_graphView);
+                DisplayActiveTabContent();
 
                 _toolbar.SetStatusSuccess($"Граф готов — {_internalGraph.nodes.Count} нод");
             }
@@ -253,32 +293,21 @@ namespace CustomVisualScripting.Editor.Windows
             info.style.marginTop = 10;
             info.style.marginLeft = 10;
             info.style.flexGrow = 1;
-
             var label = new Label($"Граф: {_currentGraph.LogicGraph.Nodes.Count} нод, {_currentGraph.LogicGraph.Edges.Count} связей");
             label.style.color = Color.white;
             label.style.fontSize = 14;
             info.Add(label);
-
-            _graphContainer.Add(info);
+            _graphHost?.Add(info);
         }
 
         private void OnDestroy()
         {
-            if (ReferenceEquals(ActiveWindow, this))
-                ActiveWindow = null;
+            if (ReferenceEquals(ActiveWindow, this)) ActiveWindow = null;
             if (_hasUnsavedChanges && _currentGraph != null && _currentGraph.LogicGraph.Nodes.Count > 0)
             {
-                bool save = EditorUtility.DisplayDialog(
-                    "Несохранённые изменения",
-                    "Хотите сохранить граф перед закрытием?",
-                    "Сохранить",
-                    "Не сохранять"
-                );
-
-                if (save)
-                    OnSave();
+                bool save = EditorUtility.DisplayDialog("Несохранённые изменения", "Хотите сохранить граф перед закрытием?", "Сохранить", "Не сохранять");
+                if (save) OnSave();
             }
-
             CleanupGraph();
         }
 
@@ -286,20 +315,16 @@ namespace CustomVisualScripting.Editor.Windows
         {
             foreach (var nodeView in nodeViews)
             {
-                if (nodeView == null)
-                    continue;
-
+                if (nodeView == null) continue;
                 var mins = NodeViewBoundsUtils.ResolveSyncMinBounds(nodeView);
                 NodeViewBoundsUtils.ApplyNodeMinStyle(nodeView, mins.minW, mins.minH);
                 NodeViewBoundsUtils.DisableGraphViewPortCollapse(nodeView);
                 NodeViewBoundsUtils.MakeNodeEdgesResizable(nodeView);
-
                 var rect = nodeView.GetPosition();
                 var xy = NodeViewBoundsUtils.GetAuthoritativeNodeTopLeft(nodeView);
                 var width = Mathf.Max(rect.width, mins.minW);
                 var height = Mathf.Max(rect.height, mins.minH);
                 nodeView.SetPosition(new Rect(xy.x, xy.y, width, height));
-
                 nodeView.UnregisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
                 nodeView.RegisterCallback<GeometryChangedEvent>(OnNodeGeometryChanged);
             }
@@ -311,18 +336,10 @@ namespace CustomVisualScripting.Editor.Windows
             {
                 switch (nodeView)
                 {
-                    case IfNodeView ifNodeView:
-                        ifNodeView.SetPanelsExpanded(false);
-                        break;
-                    case ElseNodeView elseNodeView:
-                        elseNodeView.SetPanelsExpanded(false);
-                        break;
-                    case ForNodeView forNodeView:
-                        forNodeView.SetPanelsExpanded(false);
-                        break;
-                    case WhileNodeView whileNodeView:
-                        whileNodeView.SetPanelsExpanded(false);
-                        break;
+                    case IfNodeView ifNodeView: ifNodeView.SetPanelsExpanded(false); break;
+                    case ElseNodeView elseNodeView: elseNodeView.SetPanelsExpanded(false); break;
+                    case ForNodeView forNodeView: forNodeView.SetPanelsExpanded(false); break;
+                    case WhileNodeView whileNodeView: whileNodeView.SetPanelsExpanded(false); break;
                 }
             }
         }
@@ -336,14 +353,11 @@ namespace CustomVisualScripting.Editor.Windows
 
         private void OnNodeViewAdded(BaseNodeView nodeView)
         {
-            if (nodeView == null)
-                return;
-
+            if (nodeView == null) return;
             ConfigureNodeViewSizing(new[] { nodeView });
             nodeView.schedule.Execute(() =>
             {
-                if (nodeView.panel == null)
-                    return;
+                if (nodeView.panel == null) return;
                 ConfigureNodeViewSizing(new[] { nodeView });
                 SyncNodeBoundsToLayout(nodeView);
             }).ExecuteLater(1);
@@ -351,17 +365,11 @@ namespace CustomVisualScripting.Editor.Windows
 
         private void AutoLayoutIfNeeded()
         {
-            if (_graphView == null || _graphView.nodeViews == null || _graphView.nodeViews.Count == 0)
-                return;
-
-            bool hasSavedPositions = _currentGraph?.VisualNodes != null &&
-                                     _currentGraph.VisualNodes.Count >= _graphView.nodeViews.Count;
+            if (_graphView == null || _graphView.nodeViews == null || _graphView.nodeViews.Count == 0) return;
+            bool hasSavedPositions = _currentGraph?.VisualNodes != null && _currentGraph.VisualNodes.Count >= _graphView.nodeViews.Count;
             bool hasMeaningfulSaved = hasSavedPositions && HasMeaningfulSavedPositions(_currentGraph.VisualNodes);
-
             bool needLayout = !hasMeaningfulSaved || HasHeavyOverlap(_graphView.nodeViews);
-            if (!needLayout)
-                return;
-
+            if (!needLayout) return;
             ApplyDagAutoLayout(_graphView.nodeViews);
             ResolveOverlaps(_graphView.nodeViews);
         }
@@ -369,9 +377,7 @@ namespace CustomVisualScripting.Editor.Windows
         private void ApplyDagAutoLayout(IReadOnlyList<BaseNodeView> nodeViews, float spacingX = AutoLayoutSpacingX, float spacingY = AutoLayoutSpacingY)
         {
             var customViews = nodeViews.Where(v => v?.nodeTarget is CustomBaseNode).ToList();
-            if (customViews.Count == 0)
-                return;
-
+            if (customViews.Count == 0) return;
             var nodeById = new Dictionary<string, BaseNodeView>(StringComparer.Ordinal);
             foreach (var view in customViews)
             {
@@ -379,7 +385,6 @@ namespace CustomVisualScripting.Editor.Windows
                 if (node != null && !string.IsNullOrEmpty(node.NodeId))
                     nodeById[node.NodeId] = view;
             }
-
             var outgoing = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             var incoming = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             var incomingCount = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -389,18 +394,13 @@ namespace CustomVisualScripting.Editor.Windows
                 incoming[nodeId] = new HashSet<string>(StringComparer.Ordinal);
                 incomingCount[nodeId] = 0;
             }
-
             if (_currentGraph?.LogicGraph?.Edges != null)
             {
                 foreach (var edge in _currentGraph.LogicGraph.Edges)
                 {
-                    if (edge == null || string.IsNullOrEmpty(edge.FromNodeId) || string.IsNullOrEmpty(edge.ToNodeId))
-                        continue;
-                    if (!nodeById.ContainsKey(edge.FromNodeId) || !nodeById.ContainsKey(edge.ToNodeId))
-                        continue;
-                    if (edge.FromNodeId == edge.ToNodeId)
-                        continue;
-
+                    if (edge == null || string.IsNullOrEmpty(edge.FromNodeId) || string.IsNullOrEmpty(edge.ToNodeId)) continue;
+                    if (!nodeById.ContainsKey(edge.FromNodeId) || !nodeById.ContainsKey(edge.ToNodeId)) continue;
+                    if (edge.FromNodeId == edge.ToNodeId) continue;
                     if (outgoing[edge.FromNodeId].Add(edge.ToNodeId))
                     {
                         incoming[edge.ToNodeId].Add(edge.FromNodeId);
@@ -408,67 +408,47 @@ namespace CustomVisualScripting.Editor.Windows
                     }
                 }
             }
-
             var nodeTypeById = new Dictionary<string, NodeType>(StringComparer.Ordinal);
             if (_currentGraph?.LogicGraph?.Nodes != null)
             {
                 foreach (var n in _currentGraph.LogicGraph.Nodes)
-                {
                     if (n != null && !string.IsNullOrEmpty(n.Id))
                         nodeTypeById[n.Id] = n.Type;
-                }
             }
-
             var inDegreeOriginal = incomingCount.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
             var depthById = new Dictionary<string, int>(StringComparer.Ordinal);
             var rootIds = incomingCount.Where(kv => kv.Value == 0).Select(kv => kv.Key).OrderBy(id => id, StringComparer.Ordinal).ToList();
-            foreach (var rootId in rootIds)
-                depthById[rootId] = 0;
+            foreach (var rootId in rootIds) depthById[rootId] = 0;
             var queue = new Queue<string>(rootIds);
-
             while (queue.Count > 0)
             {
                 var current = queue.Dequeue();
                 int currentDepth = depthById.TryGetValue(current, out var d) ? d : 0;
-
                 foreach (var next in outgoing[current].OrderBy(id => id, StringComparer.Ordinal))
                 {
                     int nextDepth = currentDepth + 1;
                     if (!depthById.TryGetValue(next, out var existingDepth) || nextDepth > existingDepth)
                         depthById[next] = nextDepth;
-
                     incomingCount[next]--;
-                    if (incomingCount[next] == 0)
-                        queue.Enqueue(next);
+                    if (incomingCount[next] == 0) queue.Enqueue(next);
                 }
             }
-
             int maxDepth = depthById.Count == 0 ? 0 : depthById.Values.Max();
             var unresolvedIds = nodeById.Keys.Where(id => !depthById.ContainsKey(id)).OrderBy(id => id, StringComparer.Ordinal).ToList();
             for (int i = 0; i < unresolvedIds.Count; i++)
                 depthById[unresolvedIds[i]] = maxDepth + 1 + i;
-
-            var layers = depthById
-                .GroupBy(kv => kv.Value)
-                .OrderBy(g => g.Key)
-                .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToList());
-
+            var layers = depthById.GroupBy(kv => kv.Value).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToList());
             var laneCache = new Dictionary<string, int>(StringComparer.Ordinal);
             int GetBranchLane(string nodeId, HashSet<string> visiting = null)
             {
-                if (laneCache.TryGetValue(nodeId, out var cached))
-                    return cached;
-
+                if (laneCache.TryGetValue(nodeId, out var cached)) return cached;
                 if (nodeTypeById.TryGetValue(nodeId, out var type))
                 {
                     if (type == NodeType.FlowIf) return laneCache[nodeId] = 1;
                     if (type == NodeType.FlowElse) return laneCache[nodeId] = 2;
                 }
-
                 visiting ??= new HashSet<string>(StringComparer.Ordinal);
-                if (!visiting.Add(nodeId))
-                    return 0;
-
+                if (!visiting.Add(nodeId)) return 0;
                 int lane = 0;
                 foreach (var parent in incoming[nodeId])
                     lane = Mathf.Max(lane, GetBranchLane(parent, visiting));
@@ -476,56 +456,23 @@ namespace CustomVisualScripting.Editor.Windows
                 laneCache[nodeId] = lane;
                 return lane;
             }
-
             int TypePriority(string nodeId)
             {
-                if (!nodeTypeById.TryGetValue(nodeId, out var type))
-                    return 50;
-
+                if (!nodeTypeById.TryGetValue(nodeId, out var type)) return 50;
                 switch (type)
                 {
-                    case NodeType.LiteralBool:
-                    case NodeType.LiteralInt:
-                    case NodeType.LiteralFloat:
-                    case NodeType.LiteralString:
-                        return 10;
-                    case NodeType.MathAdd:
-                    case NodeType.MathSubtract:
-                    case NodeType.MathMultiply:
-                    case NodeType.MathDivide:
-                    case NodeType.MathModulo:
-                    case NodeType.CompareEqual:
-                    case NodeType.CompareGreater:
-                    case NodeType.CompareLess:
-                    case NodeType.CompareNotEqual:
-                    case NodeType.CompareGreaterOrEqual:
-                    case NodeType.CompareLessOrEqual:
-                    case NodeType.LogicalAnd:
-                    case NodeType.LogicalOr:
-                    case NodeType.LogicalNot:
-                    case NodeType.MathfAbs:
-                    case NodeType.MathfMax:
-                    case NodeType.MathfMin:
-                    case NodeType.IntParse:
-                    case NodeType.FloatParse:
-                    case NodeType.ToStringConvert:
-                    case NodeType.UnityVector3:
-                    case NodeType.UnityGetPosition:
-                        return 20;
-                    case NodeType.FlowIf:
-                    case NodeType.FlowElse:
-                    case NodeType.FlowFor:
-                    case NodeType.FlowWhile:
-                        return 30;
-                    case NodeType.ConsoleWriteLine:
-                    case NodeType.DebugLog:
-                    case NodeType.UnitySetPosition:
-                        return 40;
-                    default:
-                        return 50;
+                    case NodeType.LiteralBool: case NodeType.LiteralInt: case NodeType.LiteralFloat: case NodeType.LiteralString: return 10;
+                    case NodeType.MathAdd: case NodeType.MathSubtract: case NodeType.MathMultiply: case NodeType.MathDivide: case NodeType.MathModulo:
+                    case NodeType.CompareEqual: case NodeType.CompareGreater: case NodeType.CompareLess: case NodeType.CompareNotEqual: case NodeType.CompareGreaterOrEqual: case NodeType.CompareLessOrEqual:
+                    case NodeType.LogicalAnd: case NodeType.LogicalOr: case NodeType.LogicalNot:
+                    case NodeType.MathfAbs: case NodeType.MathfMax: case NodeType.MathfMin:
+                    case NodeType.IntParse: case NodeType.FloatParse: case NodeType.ToStringConvert:
+                    case NodeType.UnityVector3: case NodeType.UnityGetPosition: return 20;
+                    case NodeType.FlowIf: case NodeType.FlowElse: case NodeType.FlowFor: case NodeType.FlowWhile: return 30;
+                    case NodeType.ConsoleWriteLine: case NodeType.DebugLog: case NodeType.UnitySetPosition: return 40;
+                    default: return 50;
                 }
             }
-
             foreach (var layer in layers.Values)
             {
                 layer.Sort((a, b) =>
@@ -541,7 +488,6 @@ namespace CustomVisualScripting.Editor.Windows
                     return StringComparer.Ordinal.Compare(a, b);
                 });
             }
-
             float columnGap = Mathf.Max(AutoLayoutColumnGap, spacingX * 0.2f);
             float rowGap = Mathf.Max(AutoLayoutRowGap, spacingY * 0.2f);
             const float startX = 40f;
@@ -569,9 +515,7 @@ namespace CustomVisualScripting.Editor.Windows
         private void ResolveOverlaps(IReadOnlyList<BaseNodeView> nodeViews)
         {
             var customViews = nodeViews.Where(v => v?.nodeTarget is CustomBaseNode).ToList();
-            if (customViews.Count <= 1)
-                return;
-
+            if (customViews.Count <= 1) return;
             const int maxPasses = 4;
             for (int pass = 0; pass < maxPasses; pass++)
             {
@@ -584,79 +528,53 @@ namespace CustomVisualScripting.Editor.Windows
                     {
                         var bView = customViews[j];
                         var b = bView.GetPosition();
-                        if (!a.Overlaps(b))
-                            continue;
-
+                        if (!a.Overlaps(b)) continue;
                         float moveX = Mathf.Max(0f, a.xMax - b.xMin) + OverlapResolveMargin;
                         float moveY = Mathf.Max(0f, a.yMax - b.yMin) + OverlapResolveMargin;
-                        if (moveX <= 0f && moveY <= 0f)
-                            continue;
-
-                        if (moveX <= moveY)
-                            b.x += moveX;
-                        else
-                            b.y += moveY;
-
+                        if (moveX <= 0f && moveY <= 0f) continue;
+                        if (moveX <= moveY) b.x += moveX;
+                        else b.y += moveY;
                         bView.SetPosition(b);
                         movedAny = true;
                     }
                 }
-
-                if (!movedAny)
-                    return;
+                if (!movedAny) return;
             }
         }
 
         private void OnNodeGeometryChanged(GeometryChangedEvent evt)
         {
-            if (evt?.currentTarget is not BaseNodeView nodeView)
-                return;
-
+            if (evt?.currentTarget is not BaseNodeView nodeView) return;
             nodeView.schedule.Execute(() => SyncNodeBoundsToLayout(nodeView)).ExecuteLater(0);
         }
 
         private static void SyncNodeBoundsToLayout(IReadOnlyList<BaseNodeView> nodeViews)
         {
-            if (nodeViews == null)
-                return;
-
+            if (nodeViews == null) return;
             foreach (var nodeView in nodeViews)
                 SyncNodeBoundsToLayout(nodeView);
         }
 
         private static void SyncNodeBoundsToLayout(BaseNodeView nodeView)
         {
-            if (nodeView == null)
-                return;
-
+            if (nodeView == null) return;
             NodeViewBoundsUtils.PerformFullNodeAppearanceFix(nodeView);
         }
 
         private static bool HasHeavyOverlap(IReadOnlyList<BaseNodeView> nodeViews)
         {
-            if (nodeViews.Count <= 1)
-                return false;
-
+            if (nodeViews.Count <= 1) return false;
             int overlaps = 0;
             for (int i = 0; i < nodeViews.Count; i++)
-            {
-                var a = nodeViews[i].GetPosition();
                 for (int j = i + 1; j < nodeViews.Count; j++)
-                {
-                    var b = nodeViews[j].GetPosition();
-                    if (a.Overlaps(b))
+                    if (nodeViews[i].GetPosition().Overlaps(nodeViews[j].GetPosition()))
                         overlaps++;
-                }
-            }
-
             return overlaps >= Math.Max(1, nodeViews.Count / 3);
         }
 
-        private static bool HasMeaningfulSavedPositions(IReadOnlyList<CustomVisualScripting.Integration.Models.VisualNodeData> visualNodes)
+        private static bool HasMeaningfulSavedPositions(IReadOnlyList<VisualNodeData> visualNodes)
         {
-            if (visualNodes == null || visualNodes.Count == 0)
-                return false;
-
+            if (visualNodes == null || visualNodes.Count == 0) return false;
             var unique = new HashSet<string>();
             foreach (var vn in visualNodes)
             {
@@ -664,7 +582,6 @@ namespace CustomVisualScripting.Editor.Windows
                 var y = Mathf.RoundToInt(vn.Position.y);
                 unique.Add($"{x}:{y}");
             }
-
             return unique.Count > Math.Max(1, visualNodes.Count / 3);
         }
     }

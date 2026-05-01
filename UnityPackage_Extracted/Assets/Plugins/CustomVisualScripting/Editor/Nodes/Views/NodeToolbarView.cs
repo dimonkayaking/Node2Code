@@ -13,15 +13,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
     {
         private readonly BaseGraphView _graphView;
         private readonly Dictionary<string, List<(string path, Type type)>> _categories;
-        private VisualElement _categoriesPanel;
-        private VisualElement _nodesPanel;
-        private VisualElement _resizer;
-        private VisualElement _rootParent;
-
-        private float _panelWidth = 260f;
-        private const float MinPanelWidth = 200f;
-        private float _maxAllowedWidth = 500f;
-        private const string PanelWidthPrefKey = "NodeToolbarView_Width";
+        private VisualElement _contentContainer;
 
         private static readonly Dictionary<string, Color> CategoryColors = new()
         {
@@ -40,152 +32,21 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _graphView = graphView;
             _categories = GetCategories();
 
-            _panelWidth = EditorPrefs.GetFloat(PanelWidthPrefKey, 260f);
-            _maxAllowedWidth = 500f;
-            _panelWidth = Mathf.Clamp(_panelWidth, MinPanelWidth, _maxAllowedWidth);
-
-            style.position = Position.Absolute;
-            style.right = 0;
-            style.top = 0;
-            style.bottom = 0;
-            style.width = _panelWidth;
             style.backgroundColor = new Color(0.18f, 0.18f, 0.18f);
             style.borderLeftWidth = 1;
             style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f);
-            style.marginRight = 0;
+            style.flexDirection = FlexDirection.Column;
+            style.paddingBottom = 0;
+            style.marginBottom = 0;
+            // Без minWidth – панель может сжиматься до 0
 
             BuildUI();
-            CreateResizer();
-            RegisterGlobalClickHandler();
-
-            RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
-        }
-
-        private void OnAttachToPanel(AttachToPanelEvent evt)
-        {
-            _rootParent = GetFirstAncestorOfType<VisualElement>();
-            if (_rootParent != null)
-            {
-                _rootParent.RegisterCallback<GeometryChangedEvent>(OnParentGeometryChanged);
-                UpdateMaxWidthFromParent();
-                if (_panelWidth > _maxAllowedWidth)
-                {
-                    _panelWidth = _maxAllowedWidth;
-                    style.width = _panelWidth;
-                    EditorPrefs.SetFloat(PanelWidthPrefKey, _panelWidth);
-                }
-            }
-        }
-
-        private void OnParentGeometryChanged(GeometryChangedEvent evt)
-        {
-            UpdateMaxWidthFromParent();
-            if (_panelWidth > _maxAllowedWidth)
-            {
-                _panelWidth = _maxAllowedWidth;
-                style.width = _panelWidth;
-                EditorPrefs.SetFloat(PanelWidthPrefKey, _panelWidth);
-                if (_nodesPanel.style.display == DisplayStyle.Flex)
-                    _nodesPanel.style.left = -_panelWidth;
-            }
-        }
-
-        private void UpdateMaxWidthFromParent()
-        {
-            if (_rootParent != null && _rootParent.resolvedStyle.width > 0)
-            {
-                _maxAllowedWidth = Mathf.Min(500f, _rootParent.resolvedStyle.width - 20);
-                _maxAllowedWidth = Mathf.Max(_maxAllowedWidth, MinPanelWidth);
-            }
-            else
-            {
-                _maxAllowedWidth = 500f;
-            }
-        }
-
-        private void CreateResizer()
-        {
-            _resizer = new VisualElement();
-            _resizer.style.position = Position.Absolute;
-            _resizer.style.left = -5;
-            _resizer.style.top = 0;
-            _resizer.style.bottom = 0;
-            _resizer.style.width = 10;
-            _resizer.pickingMode = PickingMode.Position;
-
-            _resizer.RegisterCallback<MouseEnterEvent>(_ => EditorUiPointerCursor.TryApply(_resizer, MouseCursor.ResizeHorizontal));
-            _resizer.RegisterCallback<MouseLeaveEvent>(_ => EditorUiPointerCursor.Clear(_resizer));
-
-            bool isResizing = false;
-            float startWidth = 0f;
-            float startMouseX = 0f;
-
-            _resizer.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.button != 0) return;
-                isResizing = true;
-                startWidth = resolvedStyle.width;
-                startMouseX = evt.mousePosition.x;
-                _resizer.CaptureMouse();
-                evt.StopPropagation();
-            });
-
-            _resizer.RegisterCallback<MouseMoveEvent>(evt =>
-            {
-                if (!isResizing) return;
-                float delta = startMouseX - evt.mousePosition.x;
-                float newWidth = startWidth + delta;
-                newWidth = Mathf.Clamp(newWidth, MinPanelWidth, _maxAllowedWidth);
-                if (Mathf.Abs(newWidth - resolvedStyle.width) > 0.1f)
-                {
-                    style.width = newWidth;
-                    _panelWidth = newWidth;
-                    EditorPrefs.SetFloat(PanelWidthPrefKey, _panelWidth);
-                    if (_nodesPanel.style.display == DisplayStyle.Flex)
-                        _nodesPanel.style.left = -_panelWidth;
-                }
-                evt.StopPropagation();
-            });
-
-            _resizer.RegisterCallback<MouseUpEvent>(evt =>
-            {
-                if (!isResizing) return;
-                isResizing = false;
-                _resizer.ReleaseMouse();
-                evt.StopPropagation();
-            });
-
-            Add(_resizer);
-        }
-
-        private void RegisterGlobalClickHandler()
-        {
-            _graphView?.RegisterCallback<MouseDownEvent>(OnGlobalMouseDown, TrickleDown.TrickleDown);
-        }
-
-        private void OnGlobalMouseDown(MouseDownEvent evt)
-        {
-            if (_nodesPanel == null || _nodesPanel.style.display == DisplayStyle.None)
-                return;
-
-            var target = evt.target as VisualElement;
-            bool clickedInside = false;
-            while (target != null)
-            {
-                if (target == _nodesPanel || target == this)
-                {
-                    clickedInside = true;
-                    break;
-                }
-                target = target.parent;
-            }
-
-            if (!clickedInside)
-                HideNodesPanel();
+            ShowCategories();
         }
 
         private void BuildUI()
         {
+            // Заголовок с возможностью обрезаться
             var title = new Label("Create Node");
             title.style.fontSize = 14;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -193,10 +54,14 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.paddingTop = 10;
             title.style.paddingBottom = 10;
             title.style.paddingLeft = 12;
+            title.style.paddingRight = 12;
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
             title.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f);
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
+            title.style.whiteSpace = WhiteSpace.NoWrap;      // запрещаем перенос
+            title.style.textOverflow = TextOverflow.Ellipsis; // многоточие
+            title.style.overflow = Overflow.Hidden;
             Add(title);
 
             var scrollView = new ScrollView();
@@ -204,37 +69,27 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             scrollView.style.paddingBottom = 0;
             scrollView.style.marginBottom = 0;
 
-            _categoriesPanel = new VisualElement();
-            _categoriesPanel.style.flexDirection = FlexDirection.Column;
-            _categoriesPanel.style.paddingBottom = 0;
-            _categoriesPanel.style.marginBottom = 0;
-            _categoriesPanel.style.paddingLeft = 5;
-            _categoriesPanel.style.paddingRight = 5;
-            _categoriesPanel.style.overflow = Overflow.Hidden;
+            _contentContainer = new VisualElement();
+            _contentContainer.style.flexDirection = FlexDirection.Column;
+            _contentContainer.style.paddingBottom = 0;
+            _contentContainer.style.marginBottom = 0;
+            _contentContainer.style.paddingLeft = 5;
+            _contentContainer.style.paddingRight = 5;
+            _contentContainer.style.width = Length.Percent(100);
+            // без Overflow.Scroll (не поддерживается)
 
+            scrollView.Add(_contentContainer);
+            Add(scrollView);
+        }
+
+        private void ShowCategories()
+        {
+            _contentContainer.Clear();
             foreach (var category in _categories)
             {
-                var categoryButton = CreateCategoryButton(category.Key);
-                _categoriesPanel.Add(categoryButton);
+                var button = CreateCategoryButton(category.Key);
+                _contentContainer.Add(button);
             }
-
-            scrollView.Add(_categoriesPanel);
-            Add(scrollView);
-
-            _nodesPanel = new VisualElement();
-            _nodesPanel.style.position = Position.Absolute;
-            _nodesPanel.style.left = -_panelWidth;
-            _nodesPanel.style.top = 0;
-            _nodesPanel.style.width = _panelWidth;
-            _nodesPanel.style.maxHeight = Length.Percent(100);
-            _nodesPanel.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f);
-            _nodesPanel.style.borderRightWidth = 1;
-            _nodesPanel.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f);
-            _nodesPanel.style.display = DisplayStyle.None;
-            _nodesPanel.style.flexDirection = FlexDirection.Column;
-            _nodesPanel.style.paddingBottom = 0;
-            _nodesPanel.style.marginBottom = 0;
-            Add(_nodesPanel);
         }
 
         private VisualElement CreateCategoryButton(string category)
@@ -255,10 +110,13 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             button.style.marginRight = 0;
             button.style.marginTop = 4;
             button.style.marginBottom = 4;
-            button.style.whiteSpace = WhiteSpace.Normal;
-            button.style.textOverflow = TextOverflow.Clip;
+            // Запрещаем перенос текста, обрезаем с многоточием
+            button.style.whiteSpace = WhiteSpace.NoWrap;
+            button.style.textOverflow = TextOverflow.Ellipsis;
+            button.style.overflow = Overflow.Hidden;
             button.style.alignSelf = Align.Stretch;
             button.style.flexGrow = 1;
+            button.style.width = Length.Percent(100);
 
             if (CategoryColors.TryGetValue(category, out var color))
             {
@@ -270,21 +128,15 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             button.RegisterCallback<MouseEnterEvent>(_ => button.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f));
             button.RegisterCallback<MouseLeaveEvent>(_ => button.style.backgroundColor = new Color(0.25f, 0.25f, 0.25f));
-
             button.clicked += () => ShowNodesForCategory(category);
             return button;
         }
 
         private void ShowNodesForCategory(string category)
         {
-            _nodesPanel.Clear();
-            _nodesPanel.style.display = DisplayStyle.Flex;
-            _nodesPanel.style.left = -_panelWidth;
-            _nodesPanel.style.paddingLeft = 5;
-            _nodesPanel.style.paddingRight = 5;
-            _nodesPanel.style.paddingBottom = 5;
+            _contentContainer.Clear();
 
-            var backButton = new Button(() => HideNodesPanel());
+            var backButton = new Button(ShowCategories);
             backButton.text = "← Back";
             backButton.style.fontSize = 12;
             backButton.style.paddingTop = 6;
@@ -293,9 +145,12 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             backButton.style.marginBottom = 8;
             backButton.style.alignSelf = Align.Stretch;
             backButton.style.flexGrow = 1;
+            backButton.style.width = Length.Percent(100);
+            backButton.style.whiteSpace = WhiteSpace.NoWrap;
+            backButton.style.textOverflow = TextOverflow.Ellipsis;
             backButton.RegisterCallback<MouseEnterEvent>(_ => backButton.style.backgroundColor = new Color(0.32f, 0.32f, 0.32f));
             backButton.RegisterCallback<MouseLeaveEvent>(_ => backButton.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f));
-            _nodesPanel.Add(backButton);
+            _contentContainer.Add(backButton);
 
             var title = new Label(category);
             title.style.fontSize = 13;
@@ -306,7 +161,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _nodesPanel.Add(title);
+            title.style.whiteSpace = WhiteSpace.NoWrap;
+            title.style.textOverflow = TextOverflow.Ellipsis;
+            title.style.overflow = Overflow.Hidden;
+            _contentContainer.Add(title);
 
             if (_categories.TryGetValue(category, out var nodes))
             {
@@ -314,7 +172,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 foreach (var node in nodes.OrderBy(n => n.path))
                 {
                     var nodeButton = CreateNodeButton(node.type, node.path, catColor);
-                    _nodesPanel.Add(nodeButton);
+                    _contentContainer.Add(nodeButton);
                 }
             }
         }
@@ -338,7 +196,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             button.style.marginBottom = 2;
             button.style.unityTextAlign = TextAnchor.MiddleCenter;
             button.style.flexGrow = 1;
-
+            button.style.width = Length.Percent(100);
             button.style.borderTopWidth = 2;
             button.style.borderBottomWidth = 2;
             button.style.borderLeftWidth = 2;
@@ -347,31 +205,31 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             button.style.borderBottomColor = categoryColor;
             button.style.borderLeftColor = categoryColor;
             button.style.borderRightColor = categoryColor;
+            button.style.whiteSpace = WhiteSpace.NoWrap;
+            button.style.textOverflow = TextOverflow.Ellipsis;
+            button.style.overflow = Overflow.Hidden;
 
             button.RegisterCallback<MouseEnterEvent>(_ => button.style.backgroundColor = new Color(0.38f, 0.38f, 0.38f));
             button.RegisterCallback<MouseLeaveEvent>(_ => button.style.backgroundColor = new Color(0.28f, 0.28f, 0.28f));
 
-            button.clicked += () => CreateNodeWithoutOverlap(nodeType);
+            button.clicked += () => CreateNodeAtCenter(nodeType);
             return button;
         }
 
-        private void CreateNodeWithoutOverlap(Type nodeType)
+        private void CreateNodeAtCenter(Type nodeType)
         {
             if (_graphView == null) return;
 
             Rect graphRect = _graphView.layout;
-            float visibleWidth = graphRect.width - _panelWidth;
-            float visibleCenterX = graphRect.x + visibleWidth / 2f;
-            float visibleCenterY = graphRect.y + graphRect.height / 2f;
-            Vector2 screenCenter = new Vector2(visibleCenterX, visibleCenterY);
+            Vector2 screenCenter = new Vector2(graphRect.width / 2f, graphRect.height / 2f);
 #pragma warning disable 0618
             Vector2 pan = (Vector2)_graphView.viewTransform.position;
             float scale = _graphView.scale;
 #pragma warning restore 0618
-            Vector2 baseCenter = (screenCenter - pan) / scale;
+            Vector2 graphCenter = (screenCenter - pan) / scale;
 
             const float gap = 25f;
-            Vector2 finalPos = FindFreePosition(baseCenter, 200, 100, gap);
+            Vector2 finalPos = FindFreePosition(graphCenter, 200, 100, gap);
 
             var node = (BaseNode)Activator.CreateInstance(nodeType);
             if (node == null) return;
@@ -380,7 +238,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             node.position = new Rect(finalPos.x, finalPos.y, 200, 100);
             _graphView.AddNode(node);
-            HideNodesPanel();
+
+            // Возврат к списку категорий
+            ShowCategories();
         }
 
         private Vector2 FindFreePosition(Vector2 desiredCenter, float nodeWidth, float nodeHeight, float gap)
@@ -417,14 +277,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                         return candidate;
                 }
             }
-
             return desiredCenter + new Vector2(UnityEngine.Random.Range(-80f, 80f), UnityEngine.Random.Range(-80f, 80f));
-        }
-
-        private void HideNodesPanel()
-        {
-            _nodesPanel.style.display = DisplayStyle.None;
-            _nodesPanel.Clear();
         }
 
         private Dictionary<string, List<(string path, Type type)>> GetCategories()
