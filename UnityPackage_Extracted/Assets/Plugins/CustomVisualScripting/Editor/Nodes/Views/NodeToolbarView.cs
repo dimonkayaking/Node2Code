@@ -62,6 +62,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f);
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
+            title.style.whiteSpace = WhiteSpace.NoWrap;          // запрет переноса
+            title.style.textOverflow = TextOverflow.Ellipsis;    // многоточие
+            title.style.overflow = Overflow.Hidden;
             Add(title);
 
             var scrollView = new ScrollView();
@@ -109,8 +112,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             button.style.marginRight = 0;
             button.style.marginTop = 4;
             button.style.marginBottom = 4;
-            button.style.whiteSpace = WhiteSpace.Normal;
-            button.style.textOverflow = TextOverflow.Clip;
+            button.style.whiteSpace = WhiteSpace.NoWrap;
+            button.style.textOverflow = TextOverflow.Ellipsis;
+            button.style.overflow = Overflow.Hidden;
             button.style.alignSelf = Align.Stretch;
             button.style.flexGrow = 1;
             button.style.width = Length.Percent(100);
@@ -143,6 +147,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             backButton.style.alignSelf = Align.Stretch;
             backButton.style.flexGrow = 1;
             backButton.style.width = Length.Percent(100);
+            backButton.style.whiteSpace = WhiteSpace.NoWrap;
+            backButton.style.textOverflow = TextOverflow.Ellipsis;
             backButton.RegisterCallback<MouseEnterEvent>(_ => backButton.style.backgroundColor = new Color(0.32f, 0.32f, 0.32f));
             backButton.RegisterCallback<MouseLeaveEvent>(_ => backButton.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f));
             _contentContainer.Add(backButton);
@@ -156,6 +162,9 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
+            title.style.whiteSpace = WhiteSpace.NoWrap;
+            title.style.textOverflow = TextOverflow.Ellipsis;
+            title.style.overflow = Overflow.Hidden;
             _contentContainer.Add(title);
 
             if (_categories.TryGetValue(category, out var nodes))
