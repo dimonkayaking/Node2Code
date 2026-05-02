@@ -20,10 +20,10 @@ namespace CustomVisualScripting.Editor.Windows
 {
     public partial class VisualScriptingWindow
     {
-        // Константы удалены – они уже определены в основном файле VisualScriptingWindow.cs
-
         private NodeToolbarView _nodeToolbar;
         private TwoPaneSplitView _graphAreaSplitter;
+
+        // Константы удалены – они определены в основном файле VisualScriptingWindow.cs
 
         private void CleanupGraph()
         {
@@ -36,7 +36,10 @@ namespace CustomVisualScripting.Editor.Windows
                 _graphView = null;
             }
             if (_internalGraph != null)
+            {
                 DestroyImmediate(_internalGraph);
+                _internalGraph = null;
+            }
         }
 
         private void CreateGUI()
@@ -46,7 +49,8 @@ namespace CustomVisualScripting.Editor.Windows
             InitializeTabsState();
 
             var root = rootVisualElement;
-            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>("Assets/Plugins/CustomVisualScripting/Windows/Styles/WindowStyles.uss");
+            var styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                "Assets/Plugins/CustomVisualScripting/Windows/Styles/WindowStyles.uss");
             if (styleSheet != null && !root.styleSheets.Contains(styleSheet))
                 root.styleSheets.Add(styleSheet);
 
@@ -63,72 +67,35 @@ namespace CustomVisualScripting.Editor.Windows
 
             var splitView = new TwoPaneSplitView(0, 350, TwoPaneSplitViewOrientation.Horizontal);
             splitView.style.flexGrow = 1;
-            splitView.style.marginLeft = 0;
-            splitView.style.marginRight = 0;
             splitView.style.marginTop = 0;
             splitView.style.marginBottom = 0;
-            splitView.style.paddingLeft = 0;
-            splitView.style.paddingRight = 0;
             splitView.style.paddingTop = 0;
             splitView.style.paddingBottom = 0;
-            splitView.style.borderTopWidth = 0;
-            splitView.style.borderBottomWidth = 0;
-            splitView.style.borderLeftWidth = 0;
-            splitView.style.borderRightWidth = 0;
 
             _codeEditor = new CodeEditorView();
-            _codeEditor.style.marginLeft = 0;
-            _codeEditor.style.marginRight = 0;
-            _codeEditor.style.marginTop = 0;
-            _codeEditor.style.marginBottom = 0;
-            _codeEditor.style.paddingLeft = 0;
-            _codeEditor.style.paddingRight = 0;
-            _codeEditor.style.paddingTop = 0;
-            _codeEditor.style.paddingBottom = 0;
-            _codeEditor.style.borderTopWidth = 0;
-            _codeEditor.style.borderBottomWidth = 0;
-            _codeEditor.style.borderLeftWidth = 0;
-            _codeEditor.style.borderRightWidth = 0;
             splitView.Add(_codeEditor);
 
             var rightArea = new VisualElement();
             rightArea.style.flexGrow = 1;
             rightArea.style.flexDirection = FlexDirection.Column;
-            rightArea.style.marginLeft = 0;
-            rightArea.style.marginRight = 0;
             rightArea.style.marginTop = 0;
             rightArea.style.marginBottom = 0;
-            rightArea.style.paddingLeft = 0;
-            rightArea.style.paddingRight = 0;
             rightArea.style.paddingTop = 0;
             rightArea.style.paddingBottom = 0;
-            rightArea.style.borderTopWidth = 0;
-            rightArea.style.borderBottomWidth = 0;
-            rightArea.style.borderLeftWidth = 0;
-            rightArea.style.borderRightWidth = 0;
 
             BuildGraphAreaWithTabs(rightArea);
 
             _graphAreaSplitter = new TwoPaneSplitView(1, 200, TwoPaneSplitViewOrientation.Horizontal);
             _graphAreaSplitter.style.flexGrow = 1;
-            _graphAreaSplitter.style.marginLeft = 0;
-            _graphAreaSplitter.style.marginRight = 0;
             _graphAreaSplitter.style.marginTop = 0;
             _graphAreaSplitter.style.marginBottom = 0;
-            _graphAreaSplitter.style.paddingLeft = 0;
-            _graphAreaSplitter.style.paddingRight = 0;
-            _graphAreaSplitter.style.paddingTop = 0;
-            _graphAreaSplitter.style.paddingBottom = 0;
-            _graphAreaSplitter.style.borderTopWidth = 0;
-            _graphAreaSplitter.style.borderBottomWidth = 0;
-            _graphAreaSplitter.style.borderLeftWidth = 0;
-            _graphAreaSplitter.style.borderRightWidth = 0;
 
             _graphHost.RemoveFromHierarchy();
             _graphAreaSplitter.Add(_graphHost);
 
             var tempStub = new VisualElement();
             _graphAreaSplitter.Add(tempStub);
+
             rightArea.Add(_graphAreaSplitter);
             splitView.Add(rightArea);
             root.Add(splitView);
@@ -141,6 +108,7 @@ namespace CustomVisualScripting.Editor.Windows
             root.Add(_consoleView);
 
             _toolbar.SetStatusNormal("Готов к работе");
+
             UpdateGraphView();
 
             _graphAreaSplitter.Remove(tempStub);
@@ -277,6 +245,12 @@ namespace CustomVisualScripting.Editor.Windows
 
                 _graphHost?.Add(_graphView);
                 DisplayActiveTabContent();
+
+                // Обновляем ссылку у существующей панели (не пересоздаём)
+                if (_nodeToolbar != null)
+                {
+                    _nodeToolbar.UpdateGraphView(_graphView);
+                }
 
                 _toolbar.SetStatusSuccess($"Граф готов — {_internalGraph.nodes.Count} нод");
             }

@@ -11,7 +11,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 {
     public class NodeToolbarView : VisualElement
     {
-        private readonly BaseGraphView _graphView;
+        private BaseGraphView _graphView;
         private readonly Dictionary<string, List<(string path, Type type)>> _categories;
         private VisualElement _contentContainer;
 
@@ -38,15 +38,19 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             style.flexDirection = FlexDirection.Column;
             style.paddingBottom = 0;
             style.marginBottom = 0;
-            // Без minWidth – панель может сжиматься до 0
 
             BuildUI();
             ShowCategories();
         }
 
+        public void UpdateGraphView(BaseGraphView newGraphView)
+        {
+            _graphView = newGraphView;
+            ShowCategories();
+        }
+
         private void BuildUI()
         {
-            // Заголовок с возможностью обрезаться
             var title = new Label("Create Node");
             title.style.fontSize = 14;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -54,14 +58,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.paddingTop = 10;
             title.style.paddingBottom = 10;
             title.style.paddingLeft = 12;
-            title.style.paddingRight = 12;
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
             title.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f);
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
-            title.style.whiteSpace = WhiteSpace.NoWrap;      // запрещаем перенос
-            title.style.textOverflow = TextOverflow.Ellipsis; // многоточие
-            title.style.overflow = Overflow.Hidden;
             Add(title);
 
             var scrollView = new ScrollView();
@@ -76,7 +76,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _contentContainer.style.paddingLeft = 5;
             _contentContainer.style.paddingRight = 5;
             _contentContainer.style.width = Length.Percent(100);
-            // без Overflow.Scroll (не поддерживается)
 
             scrollView.Add(_contentContainer);
             Add(scrollView);
@@ -110,10 +109,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             button.style.marginRight = 0;
             button.style.marginTop = 4;
             button.style.marginBottom = 4;
-            // Запрещаем перенос текста, обрезаем с многоточием
-            button.style.whiteSpace = WhiteSpace.NoWrap;
-            button.style.textOverflow = TextOverflow.Ellipsis;
-            button.style.overflow = Overflow.Hidden;
+            button.style.whiteSpace = WhiteSpace.Normal;
+            button.style.textOverflow = TextOverflow.Clip;
             button.style.alignSelf = Align.Stretch;
             button.style.flexGrow = 1;
             button.style.width = Length.Percent(100);
@@ -146,8 +143,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             backButton.style.alignSelf = Align.Stretch;
             backButton.style.flexGrow = 1;
             backButton.style.width = Length.Percent(100);
-            backButton.style.whiteSpace = WhiteSpace.NoWrap;
-            backButton.style.textOverflow = TextOverflow.Ellipsis;
             backButton.RegisterCallback<MouseEnterEvent>(_ => backButton.style.backgroundColor = new Color(0.32f, 0.32f, 0.32f));
             backButton.RegisterCallback<MouseLeaveEvent>(_ => backButton.style.backgroundColor = new Color(0.22f, 0.22f, 0.22f));
             _contentContainer.Add(backButton);
@@ -161,9 +156,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             title.style.borderBottomWidth = 1;
             title.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f);
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
-            title.style.whiteSpace = WhiteSpace.NoWrap;
-            title.style.textOverflow = TextOverflow.Ellipsis;
-            title.style.overflow = Overflow.Hidden;
             _contentContainer.Add(title);
 
             if (_categories.TryGetValue(category, out var nodes))
@@ -218,7 +210,11 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
         private void CreateNodeAtCenter(Type nodeType)
         {
-            if (_graphView == null) return;
+            if (_graphView == null || _graphView.graph == null)
+            {
+                UnityEngine.Debug.LogError("[NodeToolbarView] Graph is not initialized.");
+                return;
+            }
 
             Rect graphRect = _graphView.layout;
             Vector2 screenCenter = new Vector2(graphRect.width / 2f, graphRect.height / 2f);
@@ -237,15 +233,23 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 node.GUID = Guid.NewGuid().ToString();
 
             node.position = new Rect(finalPos.x, finalPos.y, 200, 100);
-            _graphView.AddNode(node);
 
-            // Возврат к списку категорий
+            try
+            {
+                _graphView.AddNode(node);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError($"[NodeToolbarView] Failed to add node: {e.Message}");
+                return;
+            }
+
             ShowCategories();
         }
 
         private Vector2 FindFreePosition(Vector2 desiredCenter, float nodeWidth, float nodeHeight, float gap)
         {
-            if (_graphView == null) return desiredCenter;
+            if (_graphView == null || _graphView.graph == null) return desiredCenter;
 
             var existingNodes = _graphView.graph.nodes
                 .Where(n => n != null)
