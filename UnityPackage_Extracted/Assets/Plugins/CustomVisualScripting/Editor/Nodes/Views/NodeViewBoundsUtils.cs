@@ -494,6 +494,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (sizeUnchanged && posUnchanged)
                 return;
 
+            // FIX: Защита от NaN
+            if (float.IsNaN(xy.x) || float.IsNaN(xy.y) || float.IsNaN(nw) || float.IsNaN(nh))
+                return;
+
             nodeView.SetPosition(new Rect(xy.x, xy.y, nw, nh));
             nodeView.RefreshPorts();
         }
@@ -534,9 +538,57 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             nodeView.style.height = StyleKeyword.Auto;
         }
 
+        /// <summary>
+        /// У flow-нод внутри корневого NodeView есть <see cref="SubGraphPanel"/> с вложенным GraphView;
+        /// <see cref="VisualElement.Q(string)"/> по имени selection-border находит рамку вложенной ноды,
+        /// а не внешнюю рамку самой flow-ноды.
+        /// </summary>
+        private static VisualElement ResolveOwnSelectionBorder(BaseNodeView nodeView)
+        {
+            if (nodeView == null)
+                return null;
+
+            foreach (var ve in EnumerateDescendants(nodeView))
+            {
+                if (ve.name != "selection-border")
+                    continue;
+                if (!HasAncestorWhere(ve, static x => x is SubGraphPanel))
+                    return ve;
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<VisualElement> EnumerateDescendants(VisualElement root)
+        {
+            for (var i = 0; i < root.childCount; i++)
+            {
+                var child = root.ElementAt(i);
+                yield return child;
+                foreach (var d in EnumerateDescendants(child))
+                    yield return d;
+            }
+        }
+
+        private static bool HasAncestorWhere(VisualElement element, Func<VisualElement, bool> predicate)
+        {
+            for (var p = element.parent; p != null; p = p.parent)
+            {
+                if (predicate(p))
+                    return true;
+            }
+
+            return false;
+        }
+
         private static void ApplyNodeOutlineColor(BaseNodeView nodeView)
         {
             if (nodeView?.nodeTarget is not CustomBaseNode customNode)
+                return;
+
+            // #selection-border — элемент контура ноды (GraphProcessor/Unity).
+            var selBorder = ResolveOwnSelectionBorder(nodeView);
+            if (selBorder == null)
                 return;
 
             // Убираем прежний border с mainContainer (старая версия), чтобы не было двух рамок.
@@ -551,12 +603,6 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 nodeView.mainContainer.style.borderBottomColor = StyleKeyword.Null;
                 nodeView.mainContainer.style.borderLeftColor   = StyleKeyword.Null;
             }
-
-            // #selection-border — именно тот элемент, на котором GraphProcessor/Unity рисует
-            // контур выделения. У него уже правильные скруглённые углы, совпадающие с формой ноды.
-            var selBorder = nodeView.Q("selection-border");
-            if (selBorder == null)
-                return;
 
             var categoryColor = ResolveNodeOutlineColor(customNode.NodeType);
 
@@ -594,7 +640,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (nodeView?.nodeTarget is not CustomBaseNode customNode)
                 return;
 
-            var selBorder = nodeView.Q("selection-border");
+            var selBorder = ResolveOwnSelectionBorder(nodeView);
             if (selBorder == null)
                 return;
 
@@ -783,6 +829,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             var xy = GetAuthoritativeNodeTopLeft(nodeView);
             if (float.IsNaN(w) || float.IsInfinity(w) || float.IsNaN(h) || float.IsInfinity(h))
                 return;
+                
+            // FIX: Защита от NaN в координатах
+            if (float.IsNaN(xy.x) || float.IsNaN(xy.y))
+                return;
 
             nodeView.SetPosition(new Rect(xy.x, xy.y, w, h));
             nodeView.RefreshPorts();
@@ -824,6 +874,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 Mathf.Abs(xyTopLeft.y - rect.y) < 0.5f;
 
             if (sizeUnchanged && posUnchanged)
+                return;
+
+            // FIX: Если xyTopLeft.x или y это NaN (например, из-за скрытого контейнера), не ломаем координаты
+            if (float.IsNaN(xyTopLeft.x) || float.IsNaN(xyTopLeft.y))
                 return;
 
             nodeView.SetPosition(new Rect(xyTopLeft.x, xyTopLeft.y, w, h));
