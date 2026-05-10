@@ -25,6 +25,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             _node = nodeTarget as IfNode;
             if (_node == null) return;
+            RehydrateSubGraphsFromActiveWindow();
             CleanupUi();
 
             if (controlsContainer == null)
@@ -82,6 +83,25 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             NodeViewBoundsUtils.DisableGraphViewPortCollapse(this);
             RequestBoundsSync();
+
+            schedule.Execute(() =>
+            {
+                if (_node == null) return;
+                if (_conditionPanel != null) _conditionPanel.SetSubGraph(_node.conditionSubGraph);
+                if (_bodyPanel != null) _bodyPanel.SetSubGraph(_node.bodySubGraph);
+            }).ExecuteLater(50);
+        }
+
+        private void RehydrateSubGraphsFromActiveWindow()
+        {
+            var window = VisualScriptingWindow.ActiveWindow;
+            if (window == null || _node == null || string.IsNullOrEmpty(_node.NodeId))
+                return;
+            if (!window.TryGetNodeDataById(_node.NodeId, out var nodeData))
+                return;
+
+            _node.conditionSubGraph = nodeData.ConditionSubGraph ?? _node.conditionSubGraph ?? new VisualScripting.Core.Models.GraphData();
+            _node.bodySubGraph = nodeData.BodySubGraph ?? _node.bodySubGraph ?? new VisualScripting.Core.Models.GraphData();
         }
 
         private void TogglePanels()

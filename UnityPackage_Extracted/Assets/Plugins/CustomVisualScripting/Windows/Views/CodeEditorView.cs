@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEditor;
@@ -28,15 +29,58 @@ namespace CustomVisualScripting.Windows.Views
         private GUIStyle _codeStyle;
         private GUIStyle _lineNumberStyle;
 
+        // Syntax highlighting
+        private Dictionary<string, Color> _nodeVariableColors;
+        private string _highlightedCode;
+        private bool _highlightCodeDirty = true;
+        private GUIStyle _richTextStyle;
+        private GUIStyle _transparentInputStyle;
+        private int _lastCursorIndex = -1;
+        private int _lastSelectIndex = -1;
+        private bool _wasCaretFocused;
+        private double _caretBlinkStartTime = -1d;
+
+        /// <summary>Снимок индексов после GUI.TextArea — до ApplyPendingTabIndent, чтобы GUI.FocusControl не портила selectIndex.</summary>
+        private int _capturedCursorIndex;
+        private int _capturedSelectIndex;
+        private bool _capturedHasSelection;
+
+        private Rect _lastValidViewportRect;
+        private GUIContent _codeContent = new GUIContent("");
+
+        private float GetActualLineHeight()
+        {
+            if (_codeStyle == null) return LineHeightPx;
+            float lh = _codeStyle.lineHeight;
+            if (lh > 0f) return lh;
+            float h1 = _codeStyle.CalcSize(new GUIContent("M")).y;
+            float h2 = _codeStyle.CalcSize(new GUIContent("M\nM")).y;
+            lh = h2 - h1;
+            return lh > 0f ? lh : LineHeightPx;
+        }
+
         public string Code
         {
             get => _code;
             set
             {
-                _code = value ?? string.Empty;
+                _code = value?.Replace("\r", "") ?? string.Empty;
+                _codeContent.text = _code;
                 RebuildLineMetadata();
+                _highlightCodeDirty = true;
                 _imguiEditor?.MarkDirtyRepaint();
             }
+        }
+
+        /// <summary>
+        /// Устанавливает карту variableName → Color для подсветки нод-переменных.
+        /// Вызывается из VisualScriptingWindow при изменении графа.
+        /// </summary>
+        public void SetNodeVariableColors(Dictionary<string, Color> colors)
+        {
+            _nodeVariableColors = colors;
+            _highlightCodeDirty = true;
+            _imguiEditor?.MarkDirtyRepaint();
         }
 
         public CodeEditorView()
@@ -113,6 +157,9 @@ namespace CustomVisualScripting.Windows.Views
             RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
             RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
 
+            // Периодический репейнт для мигания курсора (~530 мс)
+            _imguiEditor.schedule.Execute(() => _imguiEditor.MarkDirtyRepaint()).Every(530);
+
             RebuildLineMetadata();
         }
 
@@ -188,11 +235,17 @@ namespace CustomVisualScripting.Windows.Views
             _scrollPosition = Vector2.zero;
         }
 
+        private void RebuildHighlightIfNeeded()
+        {
+            if (!_highlightCodeDirty) return;
+            _highlightCodeDirty = false;
+            _highlightedCode = SyntaxHighlighter.BuildHighlightedText(_code, _nodeVariableColors);
+        }
+
         private void DrawEditor()
         {
             EnsureStyles();
-            if (_pendingTabIndent)
-                GUI.FocusControl(CodeControlName);
+            RebuildHighlightIfNeeded();
 
             var viewportRect = GUILayoutUtility.GetRect(0f, 100000f, 0f, 100000f, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
             EditorLikeDrawRect(viewportRect, new Color(0.12f, 0.12f, 0.12f));
@@ -201,26 +254,41 @@ namespace CustomVisualScripting.Windows.Views
 
         private void DrawEditorContents(Rect viewportRect)
         {
-            const float scrollBarAllowance = 24f;
-            float charWidth = Mathf.Max(6f, _codeStyle.CalcSize(new GUIContent("M")).x);
+            if (Event.current.type == EventType.Repaint)
+                _lastValidViewportRect = viewportRect;
 
-            // Ширина контента: минимум – видимая область, максимум – необходимая ширина по тексту
-            float requiredWidth = GutterWidth + OuterHorizontalPadding * 2f + CodeGapFromGutter + (_maxLineLength * charWidth) + RightExtraSpace;
-            float contentWidth = Mathf.Max(viewportRect.width - scrollBarAllowance, requiredWidth);
+            Rect rectToUse = _lastValidViewportRect.width > 1f ? _lastValidViewportRect : viewportRect;
+
+            const float scrollBarAllowance = 24f;
+            float contentWidth = ComputeScrollContentWidth(rectToUse);
+            
+            float actualLineH = GetActualLineHeight();
             // Высота контента: минимум – видимая область, максимум – необходимая высота по строкам
-            float requiredHeight = _lineCount * LineHeightPx + OuterVerticalPadding * 2f;
-            float contentHeight = Mathf.Max(viewportRect.height - scrollBarAllowance, requiredHeight);
+            float requiredHeight = _lineCount * actualLineH + OuterVerticalPadding * 2f + _codeStyle.padding.top + _codeStyle.padding.bottom;
+            float contentHeight = Mathf.Max(rectToUse.height - scrollBarAllowance, requiredHeight);
 
             var contentRect = new Rect(0f, 0f, contentWidth, contentHeight);
 
             _scrollPosition = GUI.BeginScrollView(viewportRect, _scrollPosition, contentRect, true, true);
-            bool textChanged = DrawScrollContent(contentRect, LineHeightPx);
+            bool textChanged = DrawScrollContent(contentRect, actualLineH);
             GUI.EndScrollView();
 
             if (textChanged && IsCodeEditorFocused())
             {
-                AdjustScrollToCaret(viewportRect);
+                // После вставки/TAB обновились _maxLineLength / _lineCount — ширина контента должна совпадать с этим кадром,
+                // иначе maxScrollX занижен и скролл резко «уезжает влево».
+                AdjustScrollToCaret(rectToUse);
             }
+        }
+
+        /// <summary>Ширина виртуального контента ScrollView по текущим метаданным строк (должна вызываться после RebuildLineMetadata).</summary>
+        private float ComputeScrollContentWidth(Rect viewportRect)
+        {
+            const float scrollBarAllowance = 24f;
+            if (_codeStyle == null) EnsureStyles();
+            float charWidth = Mathf.Max(6f, _codeStyle.CalcSize(new GUIContent("M")).x);
+            float requiredWidth = GutterWidth + OuterHorizontalPadding * 2f + CodeGapFromGutter + (_maxLineLength * charWidth) + RightExtraSpace;
+            return Mathf.Max(viewportRect.width - scrollBarAllowance, requiredWidth);
         }
 
         private bool DrawScrollContent(Rect contentRect, float lineHeight)
@@ -241,38 +309,199 @@ namespace CustomVisualScripting.Windows.Views
 
             EditorGUIUtility.AddCursorRect(codeRect, MouseCursor.Text);
 
-            if (_pendingTabIndent)
-                ApplyPendingTabIndent();
-
+            // 1. TextArea: рисует фон + курсор + выделение; сам текст прозрачен
             GUI.SetNextControlName(CodeControlName);
-            string next = GUI.TextArea(codeRect, _code, _codeStyle);
+            string next = GUI.TextArea(codeRect, _code, _transparentInputStyle);
+            if (next != null && next.Contains('\r'))
+                next = next.Replace("\r", "");
+
+            var editorSnap = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
+            if (editorSnap != null)
+            {
+                _capturedCursorIndex = editorSnap.cursorIndex;
+                _capturedSelectIndex = editorSnap.selectIndex;
+                _capturedHasSelection = editorSnap.hasSelection;
+            }
+
             if (!string.Equals(next, _code))
             {
                 _code = next;
+                _codeContent.text = _code;
                 RebuildLineMetadata();
+                _highlightCodeDirty = true;
+                RebuildHighlightIfNeeded();
                 textChanged = true;
             }
+
+            // Tab-вставку применяем после TextArea, чтобы брать актуальный TextEditor/cursorIndex.
+            if (_pendingTabIndent && ApplyPendingTabIndent())
+                textChanged = true;
+
+            // 2. Label поверх TextArea: прозрачный фон, цветной rich-text
+            GUI.Label(codeRect, _highlightedCode ?? string.Empty, _richTextStyle);
+
+            // 3. Выделение и курсор поверх Label
+            DrawCustomSelection(codeRect);
+            DrawCustomCursor(codeRect);
+
             return textChanged;
         }
 
-        private void ApplyPendingTabIndent()
+        private void DrawCustomSelection(Rect codeRect)
         {
-            _pendingTabIndent = false;
+            if (Event.current.type != EventType.Repaint) return;
+            if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName)) return;
+
             var editor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
             if (editor == null) return;
-            _code ??= string.Empty;
+            if (editor.cursorIndex == editor.selectIndex) return;
+
             int start = Mathf.Clamp(Mathf.Min(editor.cursorIndex, editor.selectIndex), 0, _code.Length);
             int end = Mathf.Clamp(Mathf.Max(editor.cursorIndex, editor.selectIndex), 0, _code.Length);
+
+            GetLineAndColumn(start, out int startLine, out int startCol);
+            GetLineAndColumn(end, out int endLine, out int endCol);
+
+            float lineH = GetActualLineHeight();
+            Color selColor = GUI.skin.settings.selectionColor;
+            if (selColor.a < 0.05f)
+                selColor = new Color(0.24f, 0.49f, 0.90f, 0.55f);
+
+            var prevColor = GUI.color;
+            GUI.color = selColor;
+
+            for (int line = startLine; line <= endLine; line++)
+            {
+                int lineStartIdx = GetLineStartIndex(line);
+                int lineEndIdx = GetLineEndIndex(line);
+
+                int selStartIdx = Mathf.Max(start, lineStartIdx);
+                int selEndIdx = Mathf.Min(end, lineEndIdx);
+
+                Vector2 startPos = _transparentInputStyle.GetCursorPixelPosition(codeRect, _codeContent, selStartIdx);
+                Vector2 endPos = _transparentInputStyle.GetCursorPixelPosition(codeRect, _codeContent, selEndIdx);
+
+                float xStart = startPos.x;
+                float xEnd = endPos.x;
+                if (xEnd <= xStart) xEnd = xStart + 2f;
+
+                float y = startPos.y;
+                var rect = new Rect(xStart, y, xEnd - xStart, lineH);
+                if (codeRect.Overlaps(rect))
+                    GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            }
+
+            GUI.color = prevColor;
+        }
+
+        private int GetLineStartIndex(int lineIndex)
+        {
+            if (lineIndex <= 0) return 0;
+            int currentLine = 0;
+            for (int i = 0; i < _code.Length; i++)
+            {
+                if (_code[i] == '\n')
+                {
+                    currentLine++;
+                    if (currentLine == lineIndex)
+                        return i + 1;
+                }
+            }
+            return _code.Length;
+        }
+
+        private int GetLineEndIndex(int lineIndex)
+        {
+            int currentLine = 0;
+            for (int i = 0; i < _code.Length; i++)
+            {
+                if (_code[i] == '\n')
+                {
+                    if (currentLine == lineIndex)
+                        return i;
+                    currentLine++;
+                }
+            }
+            return _code.Length;
+        }
+
+        /// <summary>
+        /// Перерисовывает курсор поверх rich-text метки.
+        /// TextArea уже нарисовал курсор под Label — этот метод восстанавливает его видимость.
+        /// </summary>
+        private void DrawCustomCursor(Rect codeRect)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName)) return;
+
+            // Мигание: 0.53s вкл / 0.53s выкл, с обнулением фазы при движении каретки/выделения.
+            double phase = (EditorApplication.timeSinceStartup - _caretBlinkStartTime) % 1.06;
+            if (phase > 0.53) return;
+
+            var editor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
+            if (editor == null) return;
+            UpdateCaretBlinkState(editor);
+
+            int cursorIndex = Mathf.Clamp(editor.cursorIndex, 0, _code.Length);
+            Vector2 cursorPos = _transparentInputStyle.GetCursorPixelPosition(codeRect, _codeContent, cursorIndex);
+            
+            float cursorH = GetActualLineHeight();
+            var cursorRect = new Rect(cursorPos.x, cursorPos.y, 1f, cursorH);
+
+            // Страховка: не рисуем курсор вне области редактора.
+            if (!codeRect.Overlaps(cursorRect))
+                return;
+
+            Color cursorColor = GUI.skin.settings.cursorColor;
+            if (cursorColor.a < 0.05f)
+                cursorColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+
+            var prevColor = GUI.color;
+            GUI.color = cursorColor;
+            GUI.DrawTexture(cursorRect, Texture2D.whiteTexture);
+            GUI.color = prevColor;
+        }
+
+        private void UpdateCaretBlinkState(TextEditor editor)
+        {
+            bool focused = string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName);
+            bool moved = editor.cursorIndex != _lastCursorIndex || editor.selectIndex != _lastSelectIndex;
+
+            if (_caretBlinkStartTime < 0d || moved || focused != _wasCaretFocused)
+                _caretBlinkStartTime = EditorApplication.timeSinceStartup;
+
+            _lastCursorIndex = editor.cursorIndex;
+            _lastSelectIndex = editor.selectIndex;
+            _wasCaretFocused = focused;
+        }
+
+        private bool ApplyPendingTabIndent()
+        {
+            _pendingTabIndent = false;
+
+            var editor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
+            if (editor == null) return false;
+            _code ??= string.Empty;
+            int cursor = Mathf.Clamp(_capturedCursorIndex, 0, _code.Length);
+            int select = Mathf.Clamp(_capturedSelectIndex, 0, _code.Length);
+            bool hasSelection = _capturedHasSelection && cursor != select;
+
+            int start = hasSelection ? Mathf.Min(cursor, select) : cursor;
+            int end = hasSelection ? Mathf.Max(cursor, select) : cursor;
             const string indent = "    ";
             _code = end > start
                 ? _code.Remove(start, end - start).Insert(start, indent)
                 : _code.Insert(start, indent);
+            _codeContent.text = _code;
             int newCursor = start + indent.Length;
             editor.text = _code;
             editor.cursorIndex = newCursor;
             editor.selectIndex = newCursor;
             RebuildLineMetadata();
+            _highlightCodeDirty = true;
+            RebuildHighlightIfNeeded();
             GUI.changed = true;
+            return true;
         }
 
         private void EnsureStyles()
@@ -300,49 +529,95 @@ namespace CustomVisualScripting.Windows.Views
                     normal = { textColor = new Color(0.45f, 0.45f, 0.45f) },
                     border = new RectOffset(0, 0, 0, 0)
                 };
-                _lineNumberStyle.padding = new RectOffset(0, 2, 4, 4);
+                _lineNumberStyle.padding = new RectOffset(0, 2, _codeStyle.padding.top, _codeStyle.padding.bottom);
+            }
+
+            // Стиль для rich-text слоя подсветки (рисуется под прозрачным TextArea)
+            if (_richTextStyle == null)
+            {
+                _richTextStyle = new GUIStyle(_codeStyle) { richText = true };
+                _richTextStyle.normal.background   = null;
+                _richTextStyle.focused.background  = null;
+                _richTextStyle.hover.background    = null;
+                _richTextStyle.active.background   = null;
+                _richTextStyle.onNormal.background  = null;
+                _richTextStyle.onFocused.background = null;
+                _richTextStyle.onHover.background   = null;
+                _richTextStyle.onActive.background  = null;
+                // Цвет текста по умолчанию (не покрытый тегами): VSCode-светло-серый
+                var defColor = SyntaxHighlighter.DefaultTextColor;
+                _richTextStyle.normal.textColor  = defColor;
+                _richTextStyle.focused.textColor = defColor;
+                _richTextStyle.hover.textColor   = defColor;
+                _richTextStyle.active.textColor  = defColor;
+            }
+
+            // Прозрачный стиль для TextArea — только текст скрыт, фон/курсор/выделение видны.
+            // Фон НЕ обнуляем: TextArea должен сам рисовать свой фон (тёмно-серый),
+            // поверх которого рисуется rich-text Label с прозрачным фоном.
+            if (_transparentInputStyle == null)
+            {
+                _transparentInputStyle = new GUIStyle(_codeStyle) { richText = false };
+                // Текст прозрачен; курсор/выделение рисуются отдельно (cursorColor/selectionColor)
+                _transparentInputStyle.normal.textColor   = Color.clear;
+                _transparentInputStyle.focused.textColor  = Color.clear;
+                _transparentInputStyle.hover.textColor    = Color.clear;
+                _transparentInputStyle.active.textColor   = Color.clear;
+                _transparentInputStyle.onNormal.textColor  = Color.clear;
+                _transparentInputStyle.onFocused.textColor = Color.clear;
+                _transparentInputStyle.onHover.textColor   = Color.clear;
+                _transparentInputStyle.onActive.textColor  = Color.clear;
             }
         }
 
         private void AdjustScrollToCaret(Rect viewportRect)
         {
             if (!string.Equals(GUI.GetNameOfFocusedControl(), CodeControlName)) return;
+            if (_codeStyle == null) return;
 
             var textEditor = GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) as TextEditor;
             if (textEditor == null) return;
 
+            Rect rectToUse = _lastValidViewportRect.width > 1f ? _lastValidViewportRect : viewportRect;
+            if (rectToUse.width <= 1f) return;
+
+            const float scrollBarAllowance = 24f;
+            float visibleW = Mathf.Max(1f, rectToUse.width - scrollBarAllowance);
+            float contentWidth = ComputeScrollContentWidth(rectToUse);
+            float maxScrollX = Mathf.Max(0f, contentWidth - visibleW);
+
             int cursorIndex = Mathf.Clamp(textEditor.cursorIndex, 0, _code.Length);
-            GetLineAndColumn(cursorIndex, out int line, out int column);
+            
+            // Get local cursor position relative to the text area
+            Vector2 localCursorPos = _transparentInputStyle.GetCursorPixelPosition(new Rect(0, 0, 10000, 10000), _codeContent, cursorIndex);
 
             // Вертикальная позиция
-            float caretY = _codeStyle.padding.top + line * LineHeightPx + OuterVerticalPadding;
+            float lineH = GetActualLineHeight();
+            float caretY = OuterVerticalPadding + localCursorPos.y;
             float visibleTop = _scrollPosition.y;
-            float visibleBottom = visibleTop + viewportRect.height - 40f;
+            float visibleBottom = visibleTop + rectToUse.height - 40f;
             const float verticalMargin = 10f;
 
-            if (caretY + LineHeightPx + verticalMargin > visibleBottom)
-                _scrollPosition.y = caretY + LineHeightPx + verticalMargin - (viewportRect.height - 40f);
+            if (caretY + lineH + verticalMargin > visibleBottom)
+                _scrollPosition.y = Mathf.Clamp(
+                    caretY + lineH + verticalMargin - (rectToUse.height - 40f),
+                    0f, float.MaxValue);
             else if (caretY - verticalMargin < visibleTop)
                 _scrollPosition.y = Mathf.Max(0f, caretY - verticalMargin);
 
-            // Горизонтальная позиция
-            string currentLine = GetLineText(line);
-            float caretX = column < currentLine.Length
-                ? _codeStyle.CalcSize(new GUIContent(currentLine.Substring(0, column))).x
-                : _codeStyle.CalcSize(new GUIContent(currentLine)).x;
-            float totalLeftOffset = GutterWidth + CodeGapFromGutter + OuterHorizontalPadding;
-            float caretScreenX = totalLeftOffset + caretX;
+            // Горизонталь: X каретки в координатах контента ScrollView
+            float caretContentX = GutterWidth + CodeGapFromGutter + localCursorPos.x;
 
-            float visibleLeft = _scrollPosition.x;
-            float visibleRight = visibleLeft + viewportRect.width - 30f;
-            const float horizontalMargin = 20f;
+            const float horizontalMargin = 24f;
+            float left = _scrollPosition.x;
+            float right = left + visibleW;
 
-            if (caretScreenX < visibleLeft + horizontalMargin)
-                _scrollPosition.x = Mathf.Max(0f, caretScreenX - horizontalMargin);
-            else if (caretScreenX > visibleRight - horizontalMargin)
-                _scrollPosition.x = caretScreenX - (viewportRect.width - 30f) + horizontalMargin;
+            if (caretContentX < left + horizontalMargin)
+                _scrollPosition.x = Mathf.Clamp(caretContentX - horizontalMargin, 0f, maxScrollX);
+            else if (caretContentX > right - horizontalMargin)
+                _scrollPosition.x = Mathf.Clamp(caretContentX - visibleW + horizontalMargin, 0f, maxScrollX);
 
-            _scrollPosition.x = Mathf.Max(0f, _scrollPosition.x);
+            _scrollPosition.x = Mathf.Clamp(_scrollPosition.x, 0f, maxScrollX);
             _scrollPosition.y = Mathf.Max(0f, _scrollPosition.y);
         }
 

@@ -552,9 +552,10 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 nodeView.mainContainer.style.borderLeftColor   = StyleKeyword.Null;
             }
 
-            // #selection-border — именно тот элемент, на котором GraphProcessor/Unity рисует
-            // контур выделения. У него уже правильные скруглённые углы, совпадающие с формой ноды.
-            var selBorder = nodeView.Q("selection-border");
+            // #selection-border должен принадлежать ТОЛЬКО этой ноде.
+            // В flow-подпространствах есть вложенные ноды, и обычный Q("selection-border")
+            // может попасть в чужой border, из-за чего цвета "перетекают" между нодами.
+            var selBorder = FindOwnSelectionBorder(nodeView);
             if (selBorder == null)
                 return;
 
@@ -594,7 +595,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             if (nodeView?.nodeTarget is not CustomBaseNode customNode)
                 return;
 
-            var selBorder = nodeView.Q("selection-border");
+            var selBorder = FindOwnSelectionBorder(nodeView);
             if (selBorder == null)
                 return;
 
@@ -616,6 +617,41 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             element.style.borderBottomColor = color;
             element.style.borderLeftColor   = color;
         }
+
+        private static VisualElement FindOwnSelectionBorder(BaseNodeView nodeView)
+        {
+            if (nodeView == null)
+                return null;
+
+            // Берем только тот border, чей ближайший BaseNodeView-предок == текущая нода.
+            foreach (var candidate in nodeView.Query<VisualElement>(name: "selection-border").ToList())
+            {
+                if (candidate == null)
+                    continue;
+
+                var owner = FindNearestNodeViewAncestor(candidate);
+                if (ReferenceEquals(owner, nodeView))
+                    return candidate;
+            }
+
+            return null;
+        }
+
+        private static BaseNodeView FindNearestNodeViewAncestor(VisualElement element)
+        {
+            for (var current = element; current != null; current = current.parent)
+            {
+                if (current is BaseNodeView baseNodeView)
+                    return baseNodeView;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Возвращает цвет обводки ноды по её типу. Используется, например, для подсветки синтаксиса в редакторе кода.
+        /// </summary>
+        public static Color GetNodeTypeOutlineColor(NodeType type) => ResolveNodeOutlineColor(type);
 
         private static Color ResolveNodeOutlineColor(NodeType type)
         {
@@ -708,6 +744,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             var xy = GetAuthoritativeNodeTopLeft(nodeView);
             nodeView.SetPosition(new Rect(xy.x, xy.y, w, h));
             nodeView.RefreshPorts();
+            RefreshNodeOutlineColor(nodeView);
         }
 
         /// <summary>
@@ -743,6 +780,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
                 // ForceSnapNodeSize → RefreshPorts() снова вставляет collapse-button из Unity Node.
                 StripCollapseChromeAfterPossibleRefreshPorts(nodeView);
+                RefreshNodeOutlineColor(nodeView);
             }
 
             Step();
@@ -786,6 +824,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             nodeView.SetPosition(new Rect(xy.x, xy.y, w, h));
             nodeView.RefreshPorts();
+            RefreshNodeOutlineColor(nodeView);
         }
 
         /// <summary>
@@ -828,6 +867,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             nodeView.SetPosition(new Rect(xyTopLeft.x, xyTopLeft.y, w, h));
             nodeView.RefreshPorts();
+            RefreshNodeOutlineColor(nodeView);
         }
 
         public static void MakeNodeEdgesResizable(BaseNodeView nodeView)

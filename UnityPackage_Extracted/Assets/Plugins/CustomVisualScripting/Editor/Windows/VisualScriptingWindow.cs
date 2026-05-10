@@ -192,6 +192,7 @@ namespace CustomVisualScripting.Editor.Windows
             
             string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
             _codeEditor.Code = code;
+            UpdateCodeEditorSyntaxColors();
             
             _toolbar.SetStatusSuccess("Код сгенерирован");
         }
@@ -253,7 +254,7 @@ namespace CustomVisualScripting.Editor.Windows
         
         private void OnSave()
         {
-            if (string.IsNullOrEmpty(_currentFilePath))
+            if (!HasCurrentFilePath())
             {
                 OnSaveAs();
                 return;
@@ -262,23 +263,12 @@ namespace CustomVisualScripting.Editor.Windows
             SyncFullGraphFromView();
             string code = GeneratorBridge.Generate(_currentGraph.LogicGraph);
             _codeEditor.Code = code;
-
-            try
-            {
-                File.WriteAllText(_currentFilePath, code);
-                _toolbar.SetStatusSuccess($"Сохранено: {Path.GetFileName(_currentFilePath)}");
-                _hasUnsavedChanges = false;
-                RefreshFileTabTitle();
-            }
-            catch (Exception e)
-            {
-                _toolbar.SetStatusError($"Ошибка сохранения: {e.Message}");
-            }
+            SaveCodeToPath(_currentFilePath, code);
         }
         
         private void OnSaveAs()
         {
-            string defaultName = !string.IsNullOrEmpty(_currentFilePath)
+            string defaultName = HasCurrentFilePath()
                 ? Path.GetFileName(_currentFilePath)
                 : "Script.cs";
             
@@ -290,7 +280,13 @@ namespace CustomVisualScripting.Editor.Windows
             _codeEditor.Code = code;
             _currentFilePath = path;
             RefreshFileTabTitle();
+            SaveCodeToPath(path, code);
+        }
 
+        private bool HasCurrentFilePath() => !string.IsNullOrWhiteSpace(_currentFilePath);
+
+        private void SaveCodeToPath(string path, string code)
+        {
             try
             {
                 File.WriteAllText(path, code);

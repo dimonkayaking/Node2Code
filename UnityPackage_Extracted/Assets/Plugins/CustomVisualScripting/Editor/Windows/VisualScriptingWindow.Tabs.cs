@@ -357,6 +357,12 @@ namespace CustomVisualScripting.Editor.Windows
             return _currentGraph?.LogicGraph?.Nodes?.FirstOrDefault(n => string.Equals(n.Id, nodeId, StringComparison.Ordinal));
         }
 
+        internal bool TryGetNodeDataById(string nodeId, out NodeData nodeData)
+        {
+            nodeData = FindNodeData(nodeId);
+            return nodeData != null;
+        }
+
         private static GraphData GetSubGraphRef(NodeData nodeData, SubspaceKind subspaceKind)
         {
             switch (subspaceKind)

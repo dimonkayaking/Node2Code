@@ -253,6 +253,7 @@ namespace CustomVisualScripting.Editor.Windows
                 }
 
                 _toolbar.SetStatusSuccess($"Граф готов — {_internalGraph.nodes.Count} нод");
+                UpdateCodeEditorSyntaxColors();
             }
             catch (Exception e)
             {
@@ -277,7 +278,7 @@ namespace CustomVisualScripting.Editor.Windows
         private void OnDestroy()
         {
             if (ReferenceEquals(ActiveWindow, this)) ActiveWindow = null;
-            if (_hasUnsavedChanges && _currentGraph != null && _currentGraph.LogicGraph.Nodes.Count > 0)
+            if (_hasUnsavedChanges)
             {
                 bool save = EditorUtility.DisplayDialog("Несохранённые изменения", "Хотите сохранить граф перед закрытием?", "Сохранить", "Не сохранять");
                 if (save) OnSave();
@@ -322,6 +323,7 @@ namespace CustomVisualScripting.Editor.Windows
         {
             if (_graphView?.nodeViews != null)
                 ConfigureNodeViewSizing(_graphView.nodeViews);
+            UpdateCodeEditorSyntaxColors();
             return change;
         }
 
@@ -334,7 +336,40 @@ namespace CustomVisualScripting.Editor.Windows
                 if (nodeView.panel == null) return;
                 ConfigureNodeViewSizing(new[] { nodeView });
                 SyncNodeBoundsToLayout(nodeView);
+                UpdateCodeEditorSyntaxColors();
             }).ExecuteLater(1);
+        }
+
+        internal void UpdateCodeEditorSyntaxColors()
+        {
+            if (_codeEditor == null) return;
+
+            var colors = new Dictionary<string, Color>(StringComparer.Ordinal);
+
+            // Читаем живые ноды из internal-графа (актуально при ручном добавлении нод)
+            var liveNodes = _internalGraph?.nodes?.OfType<CustomBaseNode>();
+            if (liveNodes != null)
+            {
+                foreach (var node in liveNodes)
+                {
+                    if (string.IsNullOrWhiteSpace(node.variableName)) continue;
+                    if (colors.ContainsKey(node.variableName)) continue;
+                    colors[node.variableName] = NodeViewBoundsUtils.GetNodeTypeOutlineColor(node.NodeType);
+                }
+            }
+
+            // Если internal-граф пуст — берём данные из LogicGraph (после загрузки/парсинга)
+            if (colors.Count == 0 && _currentGraph?.LogicGraph?.Nodes != null)
+            {
+                foreach (var nodeData in _currentGraph.LogicGraph.Nodes)
+                {
+                    if (string.IsNullOrWhiteSpace(nodeData.VariableName)) continue;
+                    if (colors.ContainsKey(nodeData.VariableName)) continue;
+                    colors[nodeData.VariableName] = NodeViewBoundsUtils.GetNodeTypeOutlineColor(nodeData.Type);
+                }
+            }
+
+            _codeEditor.SetNodeVariableColors(colors);
         }
 
         private void AutoLayoutIfNeeded()

@@ -33,6 +33,7 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             _node = nodeTarget as ForNode;
             if (_node == null) return;
+            RehydrateSubGraphsFromActiveWindow();
             CleanupUi();
 
             if (controlsContainer == null)
@@ -170,6 +171,29 @@ namespace CustomVisualScripting.Editor.Nodes.Views
 
             NodeViewBoundsUtils.DisableGraphViewPortCollapse(this);
             RequestBoundsSync();
+
+            schedule.Execute(() =>
+            {
+                if (_node == null) return;
+                if (_initPanel != null) _initPanel.SetSubGraph(_node.initSubGraph);
+                if (_conditionPanel != null) _conditionPanel.SetSubGraph(_node.conditionSubGraph);
+                if (_incrementPanel != null) _incrementPanel.SetSubGraph(_node.incrementSubGraph);
+                if (_bodyPanel != null) _bodyPanel.SetSubGraph(_node.bodySubGraph);
+            }).ExecuteLater(50);
+        }
+
+        private void RehydrateSubGraphsFromActiveWindow()
+        {
+            var window = VisualScriptingWindow.ActiveWindow;
+            if (window == null || _node == null || string.IsNullOrEmpty(_node.NodeId))
+                return;
+            if (!window.TryGetNodeDataById(_node.NodeId, out var nodeData))
+                return;
+
+            _node.initSubGraph = nodeData.InitSubGraph ?? _node.initSubGraph ?? new VisualScripting.Core.Models.GraphData();
+            _node.conditionSubGraph = nodeData.ConditionSubGraph ?? _node.conditionSubGraph ?? new VisualScripting.Core.Models.GraphData();
+            _node.incrementSubGraph = nodeData.IncrementSubGraph ?? _node.incrementSubGraph ?? new VisualScripting.Core.Models.GraphData();
+            _node.bodySubGraph = nodeData.BodySubGraph ?? _node.bodySubGraph ?? new VisualScripting.Core.Models.GraphData();
         }
 
         private void ToggleConditionsStrip()

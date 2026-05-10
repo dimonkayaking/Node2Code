@@ -69,8 +69,14 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             _showHeaderCollapseToggle = showHeaderCollapseToggle;
 
             BuildUI();
-            Rebuild();
             RegisterCallback<DetachFromPanelEvent>(_ => DisposeGraph());
+            RegisterCallback<AttachToPanelEvent>(OnFirstAttach);
+        }
+
+        private void OnFirstAttach(AttachToPanelEvent evt)
+        {
+            UnregisterCallback<AttachToPanelEvent>(OnFirstAttach);
+            schedule.Execute(Rebuild).ExecuteLater(1);
         }
 
         public GraphData SubGraph => _subGraph;
@@ -248,6 +254,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
             RefreshNodeViewsLayout(_graphView.nodeViews);
             AutoLayoutIfNeeded(_graphView.nodeViews);
             RefreshNodeViewsLayout(_graphView.nodeViews);
+            _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
+            _graphView.FrameAll();
 
             // One extra deferred pass after mount: GraphView/Ports geometry settles asynchronously.
             _graphView.schedule.Execute(() =>
@@ -257,6 +265,8 @@ namespace CustomVisualScripting.Editor.Nodes.Views
                 ConfigureNodeViewSizing(_graphView.nodeViews);
                 AutoLayoutIfNeeded(_graphView.nodeViews);
                 RefreshNodeViewsLayout(_graphView.nodeViews);
+                _graphView.UpdateViewTransform(Vector3.zero, Vector3.one);
+                _graphView.FrameAll();
             }).ExecuteLater(50);
 
             ApplyCollapsedVisualStateIfNeeded();
