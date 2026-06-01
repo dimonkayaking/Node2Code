@@ -1,0 +1,65 @@
+{
+  "LogicGraph": {
+    "Nodes": [
+      {
+        "Id": "node_1",
+        "Type": "VariableFloat",
+        "Value": "5f"
+      },
+      {
+        "Id": "node_2",
+        "Type": "VariableFloat",
+        "Value": "0.1f"
+      },
+      {
+        "Id": "node_3",
+        "Type": "MathMultiply",
+        "InputConnections": {
+          "left": "node_1",
+          "right": "node_2"
+        }
+      },
+      {
+        "Id": "node_4",
+        "Type": "Vector3Create",
+        "InputConnections": {
+          "x": "node_3",
+          "y": "node_1",
+          "z": "node_2"
+        }
+      },
+      {
+        "Id": "node_5",
+        "Type": "TransformPositionSet",
+        "InputConnections": {
+          "value": "node_4"
+        }
+      }
+    ]
+  },
+  "VisualNodes": [
+    {
+      "NodeId": "node_1",
+      "Position": { "x": 100, "y": 100 }
+    },
+    {
+      "NodeId": "node_2",
+      "Position": { "x": 100, "y": 200 }
+    },
+    {
+      "NodeId": "node_3",
+      "Position": { "x": 300, "y": 150 }
+    },
+    {
+      "NodeId": "node_4",
+      "Position": { "x": 500, "y": 150 }
+    },
+    {
+      "NodeId": "node_5",
+      "Position": { "x": 700, "y": 150 }
+    }
+  ],
+  "GraphOffset": { "x": 0, "y": 0 },
+  "GraphZoom": 1.0,
+  "Version": "1.0"
+}

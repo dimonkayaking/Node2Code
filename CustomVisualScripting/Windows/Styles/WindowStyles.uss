@@ -1,0 +1,210 @@
+/* Toolbar */
+.toolbar {
+    background-color: rgb(37, 37, 38);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(51, 51, 51);
+    padding: 4px 8px;
+    flex-direction: row;
+}
+
+.toolbar-button {
+    background-color: rgb(51, 51, 51);
+    border-width: 0;
+    border-radius: 4px;
+    color: white;
+    padding: 4px 12px;
+    margin: 0 4px;
+    font-size: 12px;
+}
+
+.toolbar-button:hover {
+    background-color: rgb(68, 68, 68);
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 20px;
+    background-color: rgb(68, 68, 68);
+    margin: 0 8px;
+}
+
+.toolbar-status {
+    color: rgb(153, 153, 153);
+    font-size: 11px;
+    margin-left: 8px;
+}
+
+/* Error Panel */
+.error-panel {
+    background-color: rgb(51, 26, 26);
+    border-top-width: 2px;
+    border-top-color: rgb(204, 51, 51);
+    padding: 5px 10px;
+    min-height: 100px;
+}
+
+.error-title {
+    color: rgb(255, 128, 128);
+    font-size: 14px;
+    -unity-font-style: bold;
+}
+
+.error-list {
+    margin-top: 5px;
+    flex-grow: 1;
+}
+
+.error-item {
+    color: rgb(255, 178, 178);
+    padding: 2px 0;
+    white-space: normal;
+}
+
+/* Graph Container */
+.graph-container {
+    background-color: rgb(35, 35, 35);
+}
+
+.graph-placeholder {
+    color: rgb(102, 102, 102);
+    margin-top: 20px;
+    margin-left: 10px;
+}
+
+/* Graph tabs */
+.graph-tab-strip {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(42, 42, 44);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(64, 64, 66);
+    padding: 0 6px;
+    min-height: 38px;
+}
+
+.graph-tab-host {
+    flex-grow: 1;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+}
+
+.graph-tab-item {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(52, 52, 54);
+    border-radius: 6px;
+    margin-right: 6px;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+.graph-tab-item--active {
+    background-color: rgb(73, 73, 77);
+}
+
+.graph-tab-title {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(222, 222, 222);
+    font-size: 11px;
+    padding-left: 8px;
+    padding-right: 8px;
+    min-height: 22px;
+}
+
+.graph-tab-close {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(200, 200, 200);
+    font-size: 11px;
+    min-width: 18px;
+    min-height: 18px;
+    margin-right: 2px;
+}
+
+.node-subspace-links-row {
+    flex-shrink: 0;
+}
+
+.node-subspace-links-row .node-subspace-link {
+    flex-shrink: 0;
+}
+
+.node-subspace-link {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(164, 200, 255);
+    min-width: 18px;
+    min-height: 18px;
+    font-size: 11px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Node Palette */
+.node-palette-category-button {
+    font-size: 13px;
+    padding: 8px 12px;
+    background-color: rgb(40, 40, 40);
+}
+
+.node-palette-item-button {
+    font-size: 12px;
+    padding: 6px 10px;
+    background-color: rgb(45, 45, 45);
+}
+
+.node-palette-item-button:hover {
+    background-color: rgb(55, 55, 55);
+}
+
+.node-palette-back-button {
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+/* Console View */
+.console-view {
+    margin-top: 0;
+    border-top-width: 1px;
+    border-top-color: black;
+}
+
+/* Специальные правила для CodeEditorView */
+.unity-scroll-view__content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.code-editor-text-field .unity-text-field__input,
+.code-editor-text-field.unity-text-field .unity-text-field__input {
+    border-width: 0 !important;
+    background-color: rgb(30, 30, 30);
+}
+
+.code-editor-text-field .unity-text-field__input:focus,
+.code-editor-text-field.unity-text-field .unity-text-field__input:focus {
+    border-width: 0 !important;
+}
+
+/* ... остальные стили такие же, как в предыдущей версии ... */
+
+/* Специальные правила для CodeEditorView – обеспечить растяжение на всю высоту */
+.unity-scroll-view__content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-grow: 1 !important;
+    height: 100% !important;
+}
+
+.code-editor-text-field .unity-text-field__input,
+.code-editor-text-field.unity-text-field .unity-text-field__input {
+    border-width: 0 !important;
+    background-color: rgb(30, 30, 30);
+}
+
+.code-editor-text-field .unity-text-field__input:focus,
+.code-editor-text-field.unity-text-field .unity-text-field__input:focus {
+    border-width: 0 !important;
+}
