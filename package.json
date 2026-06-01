@@ -2,8 +2,5 @@
     "name": "com.dimonkayaking.node2code",
     "version": "1.0.0",
     "displayName": "Node2Code",
-    "description": "Visual scripting to C# code generator",
-    "dependencies": {
-        "com.alelievr.node-graph-processor": "https://github.com/Warwlock/NodeGraphProcessor.git"
-    }
+    "description": "Visual scripting to C# code generator"
 }
