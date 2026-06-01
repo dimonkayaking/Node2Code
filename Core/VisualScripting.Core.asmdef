@@ -1,0 +1,7 @@
+{
+    "name": "VisualScripting.Core",
+    "rootNamespace": "VisualScripting.Core",
+    "references": [],
+    "includePlatforms": [],
+    "version": "1.0.0"
+}

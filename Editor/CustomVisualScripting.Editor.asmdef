@@ -1,0 +1,12 @@
+{
+    "name": "CustomVisualScripting.Editor",
+    "rootNamespace": "CustomVisualScripting.Editor",
+    "references": [
+        "VisualScripting.Core",
+        "CustomVisualScripting.Runtime",
+        "GraphProcessor",
+        "GraphProcessor.Editor"
+    ],
+    "includePlatforms": ["Editor"],
+    "version": "1.0.0"
+}

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using GraphProcessor;
-using Newtonsoft.Json;
 using CustomVisualScripting.Editor.Classes;
 using CustomVisualScripting.Editor.Nodes.Views;
 using UnityEngine;
@@ -43,37 +42,15 @@ namespace CustomVisualScripting.Editor.Windows
 
         internal void SaveClassesToPath(string path)
         {
-            if (string.IsNullOrWhiteSpace(path)) return;
-            try
-            {
-                var wrapper = new ClassListWrapper { Classes = ClassRegistry.Classes.ToList() };
-                File.WriteAllText(path, JsonConvert.SerializeObject(wrapper, _jsonSettings));
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogWarning($"[VS] Не удалось сохранить классы: {e.Message}");
-            }
+            // Классы сохраняются в .cs файлах через генератор кода
+            // JSON-сохранение больше не используется
         }
 
         internal void LoadClassesFromPath(string path)
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            {
-                ClassRegistry.Clear();
-                return;
-            }
-            try
-            {
-                var wrapper = JsonConvert.DeserializeObject<ClassListWrapper>(
-                    File.ReadAllText(path), _jsonSettings);
-                if (wrapper?.Classes != null) ClassRegistry.ReplaceAll(wrapper.Classes);
-                else                          ClassRegistry.Clear();
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogWarning($"[VS] Не удалось загрузить классы: {e.Message}");
-                ClassRegistry.Clear();
-            }
+            // Классы загружаются из .cs файлов через парсер
+            // JSON-загрузка больше не используется
+            ClassRegistry.Clear();
         }
 
         internal static string GetClassesFilePath(string csFilePath)

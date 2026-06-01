@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using GraphProcessor;
-using Newtonsoft.Json;
 using CustomVisualScripting.Editor.Methods;
 using CustomVisualScripting.Editor.Nodes.Base;
 using CustomVisualScripting.Editor;
@@ -98,47 +97,17 @@ namespace CustomVisualScripting.Editor.Windows
                 SyncMethodRuntime(rt);
         }
 
-        // Настройки Newtonsoft: без TypeNameHandling (всё — конкретные типы), игнорируем null и циклы.
-        private static readonly JsonSerializerSettings _jsonSettings = new JsonSerializerSettings
-        {
-            Formatting            = Formatting.Indented,
-            NullValueHandling     = NullValueHandling.Ignore,
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-        };
-
         internal void SaveMethodsToPath(string path)
         {
-            if (string.IsNullOrWhiteSpace(path)) return;
-            try
-            {
-                var wrapper = new MethodListWrapper { Methods = MethodRegistry.Methods.ToList() };
-                File.WriteAllText(path, JsonConvert.SerializeObject(wrapper, _jsonSettings));
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogWarning($"[VS] Не удалось сохранить методы: {e.Message}");
-            }
+            // Методы сохраняются в .cs файлах через генератор кода
+            // JSON-сохранение больше не используется
         }
 
         internal void LoadMethodsFromPath(string path)
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            {
-                MethodRegistry.Clear();
-                return;
-            }
-            try
-            {
-                var wrapper = JsonConvert.DeserializeObject<MethodListWrapper>(
-                    File.ReadAllText(path), _jsonSettings);
-                if (wrapper?.Methods != null) MethodRegistry.ReplaceAll(wrapper.Methods);
-                else                          MethodRegistry.Clear();
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogWarning($"[VS] Не удалось загрузить методы: {e.Message}");
-                MethodRegistry.Clear();
-            }
+            // Методы загружаются из .cs файлов через парсер
+            // JSON-загрузка больше не используется
+            MethodRegistry.Clear();
         }
 
         internal static string GetMethodsFilePath(string csFilePath)
@@ -198,16 +167,11 @@ namespace CustomVisualScripting.Editor.Windows
             runtime.ParamGraphView.style.flexGrow = 1;
             runtime.ParamGraphView.graphViewChanged += change =>
             {
-                // graphViewChanged срабатывает на удаление и рёбра, но НЕ на AddNode.
-                // Поэтому здесь обрабатываем только удаление параметров.
                 SyncMethodRuntime(runtime);
                 SyncBodyParamReferences(runtime);
                 return change;
             };
 
-            // NodeViewAdded опрашивается каждые 16 мс и срабатывает при появлении новой ноды,
-            // чего graphViewChanged не делает при AddNode. Так добавление параметра через ПКМ
-            // немедленно отражается в теле метода.
             runtime.ParamGraphView.NodeViewAdded += nv =>
             {
                 if (nv?.nodeTarget is not MethodParamNode) return;
@@ -264,10 +228,6 @@ namespace CustomVisualScripting.Editor.Windows
             runtime.BodyGraphView.UpdateViewTransform(Vector3.zero, Vector3.one);
 
             // ── Отложенная авто-раскладка тела метода ────────────────────────
-            // Выполняется через один кадр, когда GraphProcessor уже создал NodeView
-            // и их реальные размеры доступны через GetPosition().
-            // Если в GraphData уже есть осмысленное визуальное расположение (сохранённое
-            // вручную пользователем), авто-раскладка не применяется.
             runtime.BodyGraphView.schedule.Execute(() =>
             {
                 if (runtime.BodyGraphView?.nodeViews == null || runtime.BodyInternalGraph == null)
@@ -291,40 +251,17 @@ namespace CustomVisualScripting.Editor.Windows
             }).ExecuteLater(1);
 
             // ── Сборка контейнера ─────────────────────────────────────────────
-            //
-            //  TwoPaneSplitView (Vertical)
-            //  ├── Pane 0: paramArea (Column, overflow:Hidden)
-            //  │    ├── paramHeader  (32px, flexShrink:0)
-            //  │    └── ParamGraphView (flexGrow:1)
-            //  └── Pane 1: bodyArea (Column)
-            //       └── BodyGraphView (flexGrow:1)
-            //
-            // ┌─────────────────────────────────────────┐
-            // │ Параметры метода      [+ Добавить]      │  ← header (32px, фиксирован)
-            // ├─────────────────────────────────────────┤
-            // │  param graph view  (верхний пейн ~200px)│
-            // ├═════════════════════════════════════════╡  ← resizer
-            // │  body graph view   (нижний пейн)        │
-            // └─────────────────────────────────────────┘
-            //
-            // overflow:Hidden на paramArea гарантирует, что ноды GraphView
-            // не перекрывают шапку визуально. Обёртки (VisualElement) вокруг
-            // каждого GraphView обязательны — TwoPaneSplitView не работает
-            // корректно с двумя «голыми» GraphView как прямыми дочерьми.
-
-            // Верхний пейн: шапка + param-граф
             var paramArea = new VisualElement();
             paramArea.style.flexGrow      = 1;
             paramArea.style.flexDirection = FlexDirection.Column;
-            paramArea.style.overflow      = Overflow.Hidden; // clips graph nodes, prevents header overlap
+            paramArea.style.overflow      = Overflow.Hidden;
 
             var paramHeader = BuildParamAreaHeader();
-            paramHeader.style.height     = 32f;  // фиксированная высота шапки
+            paramHeader.style.height     = 32f;
             paramHeader.style.flexShrink = 0;
             paramArea.Add(paramHeader);
-            paramArea.Add(runtime.ParamGraphView); // flexGrow=1, заполняет остаток
+            paramArea.Add(runtime.ParamGraphView);
 
-            // Нижний пейн: шапка + body-граф
             var bodyArea = new VisualElement();
             bodyArea.style.flexGrow      = 1;
             bodyArea.style.flexDirection = FlexDirection.Column;
@@ -334,9 +271,8 @@ namespace CustomVisualScripting.Editor.Windows
             bodyHeader.style.height     = 32f;
             bodyHeader.style.flexShrink = 0;
             bodyArea.Add(bodyHeader);
-            bodyArea.Add(runtime.BodyGraphView); // flexGrow=1
+            bodyArea.Add(runtime.BodyGraphView);
 
-            // Разделитель между двумя пейнами
             var splitView = new TwoPaneSplitView(0, 220f, TwoPaneSplitViewOrientation.Vertical);
             splitView.style.flexGrow = 1;
             splitView.Add(paramArea);
@@ -344,21 +280,17 @@ namespace CustomVisualScripting.Editor.Windows
 
             runtime.Container = splitView;
 
-            // Даём param-графу знать о body-графе (для RMB → «Добавить в тело»)
             runtime.ParamGraphView.BodyGraphView = runtime.BodyGraphView;
 
-            // Инжектируем ноды-ссылки на параметры и поля класса в body-граф
             SyncBodyParamReferences(runtime);
             SyncBodyFieldReferences(runtime);
 
-            // Периодический тикер синхронизации
             runtime.SyncTicker =
                 runtime.BodyGraphView.schedule.Execute(() => SyncMethodRuntime(runtime)).Every(300);
 
             _methodTabRuntimes[tabId] = runtime;
         }
 
-        /// <summary>Строит заголовок панели параметров (только лейбл, без кнопки).</summary>
         private static VisualElement BuildParamAreaHeader()
         {
             var header = new VisualElement();
@@ -380,7 +312,6 @@ namespace CustomVisualScripting.Editor.Windows
             return header;
         }
 
-        /// <summary>Строит заголовок панели тела метода.</summary>
         private static VisualElement BuildBodyAreaHeader()
         {
             var header = new VisualElement();
@@ -408,7 +339,6 @@ namespace CustomVisualScripting.Editor.Windows
         {
             if (runtime?.Definition == null) return;
 
-            // ── Param-граф → ParamGraph + Parameters ─────────────────────────
             if (runtime.ParamGraphView != null && runtime.ParamInternalGraph != null)
             {
                 var allParamNodes = runtime.ParamInternalGraph.nodes.OfType<CustomBaseNode>().ToList();
@@ -417,7 +347,6 @@ namespace CustomVisualScripting.Editor.Windows
                 GraphDataViewSync.SaveVisualLayoutToGraphData(
                     runtime.Definition.ParamGraph, runtime.ParamInternalGraph, runtime.ParamGraphView);
 
-                // Обновляем плоский список Parameters из живых MethodParamNode
                 runtime.Definition.Parameters.Clear();
                 foreach (var pn in runtime.ParamInternalGraph.nodes.OfType<MethodParamNode>())
                 {
@@ -429,7 +358,6 @@ namespace CustomVisualScripting.Editor.Windows
                 }
             }
 
-            // ── Body-граф → BodyGraph ─────────────────────────────────────────
             if (runtime.BodyGraphView != null && runtime.BodyInternalGraph != null)
             {
                 var bodyNodes = runtime.BodyInternalGraph.nodes.OfType<CustomBaseNode>().ToList();
@@ -442,12 +370,6 @@ namespace CustomVisualScripting.Editor.Windows
             _hasUnsavedChanges = true;
         }
 
-        // ─── Синхронизация по требованию (для попапа) ────────────────────────
-
-        /// <summary>
-        /// Принудительно синхронизирует рантайм метода прямо сейчас (граф → def.Parameters).
-        /// Вызывается перед открытием попапа редактирования, чтобы попап получил актуальный список параметров.
-        /// </summary>
         public void ForceSyncMethodRuntime(string methodId)
         {
             var tabId = MethodTabPrefix + methodId;
@@ -455,11 +377,6 @@ namespace CustomVisualScripting.Editor.Windows
                 SyncMethodRuntime(runtime);
         }
 
-        /// <summary>
-        /// Обновляет живой граф параметров из <see cref="MethodDefinition.Parameters"/>
-        /// (def → граф). Вызывается после того как попап сохранил изменения,
-        /// чтобы граф отразил отредактированный список параметров.
-        /// </summary>
         public void SyncParamGraphFromDefinition(string methodId)
         {
             var tabId = MethodTabPrefix + methodId;
@@ -469,17 +386,14 @@ namespace CustomVisualScripting.Editor.Windows
             var def           = runtime.Definition;
             var existingNodes = runtime.ParamInternalGraph.nodes.OfType<MethodParamNode>().ToList();
 
-            // Сохраняем позиции старых нод для переиспользования
             var savedPositions = existingNodes.Select(n => n.position).ToList();
 
-            // Удаляем все старые ноды параметров через GraphView (убирает и вид, и данные)
             foreach (var oldNode in existingNodes)
             {
                 try   { runtime.ParamGraphView.RemoveNode(oldNode); }
                 catch (Exception ex) { UnityEngine.Debug.LogWarning($"[VS] SyncParamGraph RemoveNode: {ex.Message}"); }
             }
 
-            // Добавляем ноды заново по актуальному def.Parameters
             for (int i = 0; i < def.Parameters.Count; i++)
             {
                 var param = def.Parameters[i];
@@ -493,7 +407,6 @@ namespace CustomVisualScripting.Editor.Windows
                 catch (Exception ex) { UnityEngine.Debug.LogWarning($"[VS] SyncParamGraph AddNode: {ex.Message}"); }
             }
 
-            // Сохраняем обновлённое состояние в def.ParamGraph и синхронизируем ссылки на параметры в body-графе
             runtime.ParamGraphView.schedule.Execute(() =>
             {
                 SyncMethodRuntime(runtime);
@@ -501,15 +414,6 @@ namespace CustomVisualScripting.Editor.Windows
             }).ExecuteLater(150);
         }
 
-        // ─── Параметры в теле метода ─────────────────────────────────────────
-
-        /// <summary>
-        /// Синхронизирует ноды-ссылки на параметры в графе тела метода.
-        /// Для каждого параметра из <see cref="MethodDefinition.Parameters"/> в body-граф
-        /// добавляется <see cref="MethodParamNode"/> с выходным портом «value».
-        /// Пользователь может соединять эти ноды с другими нодами (например, сложить x + y).
-        /// Параметры, которых больше нет — удаляются вместе со своими связями.
-        /// </summary>
         private void SyncBodyParamReferences(MethodTabRuntime runtime)
         {
             if (runtime?.Definition == null) return;
@@ -518,7 +422,6 @@ namespace CustomVisualScripting.Editor.Windows
             var def           = runtime.Definition;
             var currentParams = def.Parameters ?? new List<ParameterDefinition>();
 
-            // Все MethodParamNode в body-графе — это авто-инжектированные ссылки на параметры.
             var existingRefs = runtime.BodyInternalGraph.nodes
                 .OfType<MethodParamNode>()
                 .ToList();
@@ -528,7 +431,6 @@ namespace CustomVisualScripting.Editor.Windows
             var currentNames = new HashSet<string>(
                 currentParams.Select(p => p.Name), StringComparer.Ordinal);
 
-            // Удаляем ноды для параметров, которые были удалены
             foreach (var node in existingRefs)
             {
                 if (!currentNames.Contains(node.ParamName))
@@ -541,24 +443,20 @@ namespace CustomVisualScripting.Editor.Windows
                 }
                 else
                 {
-                    // Обновляем тип, если он изменился
                     var p = currentParams.First(x => x.Name == node.ParamName);
                     node.ParamType = p.Type;
                 }
             }
 
-            // Добавляем ноды для новых параметров
             int existingCount = existingRefs.Count(n => currentNames.Contains(n.ParamName));
             for (int i = 0; i < currentParams.Count; i++)
             {
                 var param = currentParams[i];
-                if (existingByName.ContainsKey(param.Name)) continue; // уже есть
+                if (existingByName.ContainsKey(param.Name)) continue;
 
                 var pn = new MethodParamNode { ParamName = param.Name, ParamType = param.Type };
-                // Стабильный ID: не дублируется при повторных открытиях
                 pn.NodeId = "_paramref_" + param.Name;
                 pn.SetGUID(pn.NodeId);
-                // Располагаем слева, стопкой по вертикали
                 pn.position = new Rect(40f, 40f + existingCount * 120f, 200f, 80f);
                 existingCount++;
 
@@ -570,13 +468,6 @@ namespace CustomVisualScripting.Editor.Windows
             }
         }
 
-        // ─── Импорт методов из парсера ───────────────────────────────────────
-
-        /// <summary>
-        /// Импортирует методы, обнаруженные парсером как inline-локальные функции,
-        /// в <see cref="MethodRegistry"/>. Существующие методы обновляются (параметры,
-        /// тип возврата, тело), новые — добавляются.
-        /// </summary>
         internal void ImportDiscoveredMethods(IEnumerable<MethodInfo> discovered)
         {
             if (discovered == null) return;
@@ -619,14 +510,6 @@ namespace CustomVisualScripting.Editor.Windows
                 UnityEngine.Debug.Log($"[VS] Импортировано inline-методов: {count}");
         }
 
-        // ─── Поля класса в теле метода ───────────────────────────────────────
-
-        /// <summary>
-        /// Синхронизирует ноды-ссылки на статические поля класса в body-графе метода.
-        /// Для каждого поля из <see cref="ClassDefinition.Fields"/> добавляется
-        /// <see cref="Nodes.Methods.FieldRefNode"/> со стабильным ID <c>"_fieldref_" + field.Id</c>.
-        /// Поля, которых больше нет, — удаляются.
-        /// </summary>
         private void SyncBodyFieldReferences(MethodTabRuntime runtime)
         {
             if (runtime?.Definition == null) return;
@@ -638,32 +521,23 @@ namespace CustomVisualScripting.Editor.Windows
             var classDef = Classes.ClassRegistry.GetById(classId);
             var classFields = classDef?.Fields ?? new System.Collections.Generic.List<Classes.FieldDefinition>();
 
-            // Все FieldRefNode в body-графе — авто-инжектированные ссылки на поля.
             var existingRefs = runtime.BodyInternalGraph.nodes
                 .OfType<Nodes.Methods.FieldRefNode>()
                 .ToList();
 
-            // existingById может иметь пустой ключ для нод, инжектированных парсером
-            // (parser не задаёт FieldId — используем "").
             var existingById = new Dictionary<string, Nodes.Methods.FieldRefNode>(StringComparer.Ordinal);
             foreach (var n in existingRefs)
                 existingById[n.FieldId ?? ""] = n;
 
             var currentIds = new HashSet<string>(classFields.Select(f => f.Id), StringComparer.Ordinal);
 
-            // Для нод с пустым FieldId (инжектированных парсером) — сопоставляем по имени
-            // или по стабильному ID-суффиксу вида "_fieldref_<fieldName>".
-            // После матча обновляем FieldId и регистрируем в existingById, чтобы не удалять
-            // ноду и не создавать дубликат.
             const string FieldRefPrefix = "_fieldref_";
             foreach (var node in existingRefs)
             {
                 if (!string.IsNullOrEmpty(node.FieldId)) continue;
 
-                // Первичный матч: по FieldName
                 var match = classFields.FirstOrDefault(f => f.Name == node.FieldName);
 
-                // Вторичный матч: по суффиксу NodeId ("_fieldref_<fieldName>")
                 if (match == null && node.NodeId != null && node.NodeId.StartsWith(FieldRefPrefix, StringComparison.Ordinal))
                 {
                     var nameFromId = node.NodeId.Substring(FieldRefPrefix.Length);
@@ -676,24 +550,19 @@ namespace CustomVisualScripting.Editor.Windows
                     node.FieldId   = match.Id;
                     node.FieldType = match.Type;
                     node.FieldName = match.Name;
-                    existingById[match.Id] = node; // регистрируем под корректным GUID
+                    existingById[match.Id] = node;
                 }
             }
 
-            // Удаляем только ноды для полей, которых больше нет в классе.
-            // Ноды с активными соединениями НЕ удаляем — они инжектированы парсером
-            // и несут реальные связи (exec-цепочка, data-рёбра).
             foreach (var node in existingRefs)
             {
                 if (!currentIds.Contains(node.FieldId))
                 {
-                    // Проверяем, есть ли у ноды активные соединения в графе
                     bool hasConnections = runtime.BodyInternalGraph.edges
                         .Any(e => e.inputNode == node || e.outputNode == node);
 
                     if (hasConnections)
                     {
-                        // Нода подключена — не удаляем. Пытаемся перепривязать по имени.
                         var rescue = classFields.FirstOrDefault(f =>
                             string.Equals(f.Name, node.FieldName, StringComparison.Ordinal));
                         if (rescue != null)
@@ -719,7 +588,6 @@ namespace CustomVisualScripting.Editor.Windows
                 }
             }
 
-            // Добавляем ноды только для полей, которых ещё нет
             int count = existingRefs.Count(n => currentIds.Contains(n.FieldId));
             for (int i = 0; i < classFields.Count; i++)
             {
@@ -760,8 +628,6 @@ namespace CustomVisualScripting.Editor.Windows
             }
             return result;
         }
-
-        // ─── Удаление рантаймов ──────────────────────────────────────────────
 
         internal void DisposeMethodRuntime(string tabId)
         {
@@ -810,6 +676,20 @@ namespace CustomVisualScripting.Editor.Windows
             }
 
             runtime.Container = null;
+        }
+
+        private static void ApplyLiteralValues(CustomBaseNode node, NodeData nodeData)
+        {
+            if (node is Nodes.Literals.IntNode intNode && int.TryParse(nodeData.Value, out var intVal))
+                intNode.intValue = intVal;
+            else if (node is Nodes.Literals.FloatNode floatNode &&
+                     float.TryParse(nodeData.Value, System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture, out var floatVal))
+                floatNode.floatValue = floatVal;
+            else if (node is Nodes.Literals.BoolNode boolNode && bool.TryParse(nodeData.Value, out var boolVal))
+                boolNode.boolValue = boolVal;
+            else if (node is Nodes.Literals.StringNode stringNode)
+                stringNode.stringValue = nodeData.Value;
         }
     }
 }

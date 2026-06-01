@@ -1,0 +1,7 @@
+{
+    "name": "CustomVisualScripting.Runtime",
+    "rootNamespace": "CustomVisualScripting.Runtime",
+    "references": ["VisualScripting.Core"],
+    "includePlatforms": [],
+    "version": "1.0.0"
+}
